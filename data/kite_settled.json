@@ -1,0 +1,62 @@
+{
+  "hashes": {
+    "fund_60_40_income.cash": "92b25e92ced2acc177680378341e4391a4dc72d7d72a7f784f8e3da46a7d40f8",
+    "fund_60_40_income.structural_grid": "c863cb0d4b85620cc3d9279ba00e2ffc5f6d68c418783b23d0ae654cf66cbc4b",
+    "fund_75_25_balanced.cash": "e7170fa1de5cfa85f3b844403c65d808985430d095d6d2e6b502ec63ec3ea1f8",
+    "fund_75_25_balanced.structural_grid": "5fd1f3393139a504745a93e827f15cd2192c2cc5aba27e002a782c12605b56ff",
+    "fund_90_10_growth.aggressive_grid": "b5bc7ff862400e04749395648ece407c1b6551b9865d23bfa3e8194bf32a7278",
+    "fund_90_10_growth.directional_momentum": "f8a1058588832a06e9733fd05d43d33c211072f46656ff64f366ec83c214acba",
+    "fund_90_10_growth.memecoin_sniper": "513873cb1c5e005b2688bb004181aca8332a1a6a3a353bf9aee757496c9875ff",
+    "fund_90_10_growth.xstocks_directional": "cc1b6ef910f6d07af00def16f0562d10836f6ecd977c3192668d24a59a9b22d2"
+  },
+  "txs": [
+    {
+      "content_hash": "c863cb0d4b85620cc3d9279ba00e2ffc5f6d68c418783b23d0ae654cf66cbc4b",
+      "nonce": 0,
+      "sleeve": "fund_60_40_income.structural_grid",
+      "tx": "81cfa0075ab910645120a4ad48e710d64cb18ca4894cceb8d34e7f74daf13364"
+    },
+    {
+      "content_hash": "92b25e92ced2acc177680378341e4391a4dc72d7d72a7f784f8e3da46a7d40f8",
+      "nonce": 1,
+      "sleeve": "fund_60_40_income.cash",
+      "tx": "1a82be1dc56851226f49cd4e028cc7beda1e9879acafa2a9d81857960e1230f5"
+    },
+    {
+      "content_hash": "5fd1f3393139a504745a93e827f15cd2192c2cc5aba27e002a782c12605b56ff",
+      "nonce": 2,
+      "sleeve": "fund_75_25_balanced.structural_grid",
+      "tx": "adf4cf8c9ea520c1621e062430250e93b49f71c0b4727de6c16f251eeebbe081"
+    },
+    {
+      "content_hash": "e7170fa1de5cfa85f3b844403c65d808985430d095d6d2e6b502ec63ec3ea1f8",
+      "nonce": 3,
+      "sleeve": "fund_75_25_balanced.cash",
+      "tx": "87e12bbed1bee64dc6a3cc62229ab3f047e68cacb1e507465d2027ab4ed051d9"
+    },
+    {
+      "content_hash": "b5bc7ff862400e04749395648ece407c1b6551b9865d23bfa3e8194bf32a7278",
+      "nonce": 4,
+      "sleeve": "fund_90_10_growth.aggressive_grid",
+      "tx": "28f20b046679ed7b10fff8d4a81707c9c152e74a06dadd1b8d355d424ce2fdd7"
+    },
+    {
+      "content_hash": "f8a1058588832a06e9733fd05d43d33c211072f46656ff64f366ec83c214acba",
+      "nonce": 5,
+      "sleeve": "fund_90_10_growth.directional_momentum",
+      "tx": "74c74f17549b77583b988f3265985f6b13cf4d481b0c5af1fe0e129b5f48255c"
+    },
+    {
+      "content_hash": "513873cb1c5e005b2688bb004181aca8332a1a6a3a353bf9aee757496c9875ff",
+      "nonce": 6,
+      "sleeve": "fund_90_10_growth.memecoin_sniper",
+      "tx": "169f69e77034a47d70069c116f3d2761eea295dab381fd92515c14846a96458c"
+    },
+    {
+      "content_hash": "cc1b6ef910f6d07af00def16f0562d10836f6ecd977c3192668d24a59a9b22d2",
+      "nonce": 7,
+      "sleeve": "fund_90_10_growth.xstocks_directional",
+      "tx": "05e930c312d9c74b6d9d0fde765dcc12950d9d1acfb371410f90b0a4df593aee"
+    }
+  ]
+}

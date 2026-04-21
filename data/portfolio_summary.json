@@ -247,5 +247,7 @@
       "staked_usd": 140.0,
       "funded": true
     }
-  }
+  },
+  "as_of": "2026-04-21T00:27Z",
+  "source": "wukong:~/.hermes/brain/funds/"
 }

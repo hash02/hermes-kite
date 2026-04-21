@@ -73,7 +73,7 @@ def main():
 
     pending = []
     for name, pos in sleeves.items():
-        if pos.get("status") != "funded":
+        if not pos.get("funded"):
             continue
         h = sleeve_hash(name, pos)
         if settled["hashes"].get(name) == h:
@@ -99,7 +99,7 @@ def main():
             "data": "0x" + data,
         }
         signed = acct.sign_transaction(tx)
-        tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         print(f"[kite] settled sleeve={name}  tx={tx_hash.hex()}")
         settled["hashes"][name] = h
         settled.setdefault("txs", []).append({
