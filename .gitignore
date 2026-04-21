@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+*.key
+wallet.json
+data/portfolio_local.json
+.venv/
