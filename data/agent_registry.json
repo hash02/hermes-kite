@@ -1,0 +1,23 @@
+{
+  "agent_id": "hermes-kite-portfolio-manager",
+  "chain_id": 2368,
+  "controller": "0xA29fF03ABfd219e3c76D1C18653297B8201B7748",
+  "explorer": "https://testnet.kitescan.ai/tx/0x00c569ea55cf73354e408f5e23733e8e17cd12768122e9c3e2f11a1139a1c9f8",
+  "payload": {
+    "agent_id": "hermes-kite-portfolio-manager",
+    "as_of": "2026-04-21T07:59:11Z",
+    "capabilities": [
+      "scan:market-feeds",
+      "decide:sleeve-allocation",
+      "route:fund-sleeves",
+      "settle:onchain-markers"
+    ],
+    "chain_id": 2368,
+    "controller": "0xA29fF03ABfd219e3c76D1C18653297B8201B7748",
+    "protocol": "did:kite-testnet:self-attested",
+    "version": "v0.1.0"
+  },
+  "payload_hash": "d6b2722ecae40c04c158bb07fbdd240c9b13a7275b45c8de9f8f4a3106674139",
+  "tx": "00c569ea55cf73354e408f5e23733e8e17cd12768122e9c3e2f11a1139a1c9f8",
+  "version": "v0.1.0"
+}

@@ -29,6 +29,7 @@ PRIV_KEY = os.environ.get("KITE_PRIVATE_KEY")
 ROOT = Path(__file__).resolve().parent.parent
 PORTFOLIO_FILE = ROOT / "data" / "portfolio_summary.json"
 SETTLED_FILE = ROOT / "data" / "kite_settled.json"
+REGISTRY_FILE = ROOT / "data" / "agent_registry.json"
 
 
 def load_json(path: Path, default):
@@ -70,6 +71,11 @@ def main():
     portfolio = load_json(PORTFOLIO_FILE, {})
     sleeves = portfolio.get("sleeves", {})
     settled = load_json(SETTLED_FILE, {"hashes": {}})
+    registry = load_json(REGISTRY_FILE, {})
+    agent_id = registry.get("agent_id", "unregistered")
+    passport_hash = registry.get("payload_hash", "")
+    if agent_id != "unregistered":
+        print(f"[kite] agent_id={agent_id} passport={passport_hash[:12]}...")
 
     pending = []
     for name, pos in sleeves.items():
@@ -88,7 +94,7 @@ def main():
     gas_price = w3.eth.gas_price
 
     for name, pos, h in pending:
-        data = f"hermes-kite:{name}:{h}".encode().hex()
+        data = f"hermes-kite:{agent_id}:{name}:{h}".encode().hex()
         tx = {
             "to": acct.address,  # self-send marker
             "value": 0,
