@@ -31,11 +31,11 @@ All paper. Real market data. One on-chain executor sends settlement to Kite test
 | funds | 3 (60/40 income, 75/25 balanced, 90/10 growth) |
 | sleeves total | 16 |
 | sleeves funded | 16 |
-| total positions opened | 204 |
+| total positions opened | 207 |
 | total target capital | $3,000 |
-| total open exposure | $1,868.01 |
-| total cumulative stake | $4,267.64 |
-| cumulative PnL (paper) | $+7.47 |
+| total open exposure | $1,415.86 |
+| total cumulative stake | $3,817.64 |
+| cumulative PnL (paper) | $+5.32 |
 | on-chain settlement txs | 106 (8 new sleeve hashes pending next :32 cron) |
 | live signals dashboard | https://bionicbanker.tech/signals/ |
 | live portfolio dashboard | https://bionicbanker.tech/portfolio/ |
@@ -74,7 +74,9 @@ No daemons. No long-lived processes. Every worker is a cron job that runs once, 
 
 | Worker | Feed | Sleeve |
 |---|---|---|
-| `aave_usdc_worker.py` | DeFiLlama Aave V3 Ethereum USDC supply APY | stablecoin_yield |
+| `aave_usdc_worker.py` | DeFiLlama Aave V3 Ethereum USDC supply APY | stablecoin_yield / stablecoin_floor (per-sleeve sizing) |
+| `morpho_usdc_worker.py` | DeFiLlama Morpho Blue USDC vault APY | stablecoin_yield (60/40) |
+| `sgho_worker.py` | DeFiLlama sGHO (Aave Savings GHO) APY | stablecoin_yield / stablecoin_floor (75/25 + 90/10) |
 | `delta_neutral_worker.py` | Binance perp funding + spot | delta_neutral |
 | `polymarket_btc_updown_worker.py` | Polymarket Gamma API BTC daily up/down | event_edge |
 | `xstocks_grid_worker.py` | xStocks tokenized equity price | equity_grid |

@@ -1,28 +1,27 @@
 #!/usr/bin/env python3
 """
-aave_usdc scanner worker -- funds the stablecoin_yield / stablecoin_floor sleeves
-across all three Hermes paper funds (60/40, 75/25, 90/10).
+morpho_usdc scanner worker -- diversifies the 60/40 stablecoin_yield sleeve
+alongside aave_usdc.
 
-Mechanism: SUPPLY USDC on Aave V3 (Ethereum mainnet). No leverage, no impermanent
-loss, no counterparty risk beyond Aave itself. Accrue interest at live supply APY
-pulled from DeFiLlama (free, no key).
+Mechanism: SUPPLY USDC into a Morpho Blue USDC vault (Ethereum mainnet).
+Different smart-contract surface than Aave V3, so paired allocation cuts
+single-protocol risk in half. APY pulled from DeFiLlama (free, no key).
 
-Sizing: one paper position per fund-sleeve. The sleeve target is split across
-the worker(s) configured for that sleeve in funds/fund_router.py — when more
-yield workers ship (morpho_usdc, sgho, etc.), each takes its share. The
-SLEEVE_TARGETS table below is the contract: keys are "{fund}.{sleeve}", values
-are this worker's principal allocation in that sleeve.
+Pool: Steakhouse USDC Morpho Blue vault on DeFiLlama
+  pool_id: cefa9ef5-c4eb-4a3f-924b-b8a3bf6f25e5
 
 Cycle work:
-  1. Fetch current USDC supply APY from DeFiLlama pool
-     aa70268e-4b52-42bf-a116-608b370f9501 (Aave V3 Ethereum USDC)
-  2. For each entry in SLEEVE_TARGETS:
-       - Upsert one position tagged worker="aave_usdc", fund=<fund_id>,
-         sleeve=<sleeve_id>, sized to that sleeve's principal
-       - Accrue yield on existing principal: principal * apy * dt_years
-  3. Emit status file at ~/.hermes/brain/status/aave_usdc.json
+  1. Fetch APY for the configured pool from DeFiLlama
+  2. Upsert one fund-scoped paper position per sleeve in SLEEVE_TARGETS
+  3. Accrue principal * apy * dt_years on each
+  4. Emit status
 
-Paper only. No real tx. No keys. R-001 compliant (free API).
+Same contract as aave_usdc:
+  - Tags positions with worker="morpho_usdc", fund=<fund_id>, sleeve=<sleeve_id>
+  - Upserts into ~/.hermes/brain/paper_portfolio.json
+  - Status at ~/.hermes/brain/status/morpho_usdc.json
+
+Paper only. R-001 compliant.
 """
 from __future__ import annotations
 import json
@@ -34,33 +33,23 @@ from pathlib import Path
 
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
-STATUS_FILE = HERMES / "status" / "aave_usdc.json"
+STATUS_FILE = HERMES / "status" / "morpho_usdc.json"
 
-WORKER_NAME = "aave_usdc"
-SYMBOL = "AAVE_V3_USDC_ETH"
+WORKER_NAME = "morpho_usdc"
+SYMBOL = "MORPHO_BLUE_USDC_ETH"
 
-# Per-sleeve principal. Sized so each sleeve hits its target_usd when summed
-# across all configured workers. Update when sibling workers ship/retire.
+# 60/40 stablecoin_yield target $400, sharing with aave_usdc — each takes $200.
 SLEEVE_TARGETS = {
-    # 60/40 stablecoin_yield target $400, configured workers: aave + morpho + euler
-    # Shipping today: aave + morpho. Each takes $200 = $400/2.
     "fund_60_40_income.stablecoin_yield": 200.00,
-    # 75/25 stablecoin_yield target $250, configured workers: aave + sgho + superstate
-    # Shipping today: aave + sgho. Each takes $125 (third worker pending).
-    "fund_75_25_balanced.stablecoin_yield": 125.00,
-    # 90/10 stablecoin_floor target $100, configured workers: aave + sgho.
-    # Each takes $50.
-    "fund_90_10_growth.stablecoin_floor": 50.00,
 }
 
-POOL_ID = "aa70268e-4b52-42bf-a116-608b370f9501"
+POOL_ID = "cefa9ef5-c4eb-4a3f-924b-b8a3bf6f25e5"
 CHART_URL = f"https://yields.llama.fi/chart/{POOL_ID}"
 
-UA = {"User-Agent": "hermes-aave-usdc/1.0"}
+UA = {"User-Agent": "hermes-morpho-usdc/1.0"}
 
 
 def fetch_apy():
-    """Return (apy_decimal, source_timestamp_iso) or (None, None) on failure."""
     req = urllib.request.Request(CHART_URL, headers=UA)
     with urllib.request.urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
@@ -91,11 +80,10 @@ def save_portfolio_atomic(pf):
 
 
 def position_id(sleeve_id: str) -> str:
-    return f"aave_usdc:{sleeve_id}"
+    return f"morpho_usdc:{sleeve_id}"
 
 
 def upsert_sleeve_position(pf, sleeve_id: str, principal: float, apy):
-    """Upsert one paper position scoped to a single sleeve. Returns the position."""
     now = time.time()
     fund_id = sleeve_id.split(".", 1)[0]
     pos_id = position_id(sleeve_id)
@@ -118,9 +106,9 @@ def upsert_sleeve_position(pf, sleeve_id: str, principal: float, apy):
             "entry_price": 1.00,
             "size_usd": principal,
             "principal_usd": principal,
-            "confidence": 0.95,
+            "confidence": 0.92,
             "entry_time": now,
-            "horizon_hours": 8760,  # roll annually
+            "horizon_hours": 8760,
             "resolved": False,
             "exit_price": 0.0,
             "pnl_usd": 0.0,
@@ -128,7 +116,7 @@ def upsert_sleeve_position(pf, sleeve_id: str, principal: float, apy):
             "resolve_time": 0.0,
             "high_water_mark": principal,
             "low_water_mark": principal,
-            "trailing_stop_pct": 0.0,  # yield position, no trailing stop
+            "trailing_stop_pct": 0.0,
             "trailing_triggered": False,
             "current_apy": apy if apy is not None else 0.0,
             "last_update": now,
@@ -137,7 +125,6 @@ def upsert_sleeve_position(pf, sleeve_id: str, principal: float, apy):
         existing = position
     else:
         last = existing.get("last_update", existing.get("entry_time", now))
-        # Resize if SLEEVE_TARGETS changed since last run (preserve accrual).
         prior_principal = existing.get("principal_usd", principal)
         if prior_principal != principal:
             accrued_so_far = existing.get("size_usd", prior_principal) - prior_principal
@@ -188,11 +175,11 @@ def write_status(positions, apy, ok, error_msg=None):
         "risk": {
             "position_sizing_method": "per_sleeve_target",
             "stop_loss_pct": None,
-            "counterparty": "aave_v3_ethereum_mainnet",
-            "protocol_risk": "smart_contract_v3",
+            "counterparty": "morpho_blue_ethereum_mainnet",
+            "protocol_risk": "smart_contract_morpho_blue",
         },
         "strategy_config": {
-            "protocol": "aave-v3",
+            "protocol": "morpho-blue",
             "chain": "ethereum",
             "asset": "USDC",
             "pool_id": POOL_ID,
@@ -231,7 +218,7 @@ def main():
     apy_str = f"{apy*100:.4f}%" if apy is not None else "UNK"
     total_size = sum(p.get("size_usd", 0) for p in positions)
     total_pnl = sum(p.get("pnl_usd", 0) for p in positions)
-    print(f"[aave_usdc] apy={apy_str}  sleeves={len(positions)}  "
+    print(f"[morpho_usdc] apy={apy_str}  sleeves={len(positions)}  "
           f"total_size=${total_size:.6f}  total_pnl=${total_pnl:.6f}  ok={ok}")
 
 

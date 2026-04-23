@@ -3,17 +3,21 @@
     "fund_60_40_income.stablecoin_yield": {
       "target_pct": 40,
       "target_usd": 400.0,
-      "open_exposure_usd": 402.3,
-      "drift_pct": 0.6,
+      "open_exposure_usd": 402.66,
+      "drift_pct": 0.7,
       "workers_configured": [
         "aave_usdc",
         "morpho_usdc",
         "euler_pyusd"
       ],
-      "positions_total": 1,
+      "workers_shipping": [
+        "aave_usdc",
+        "morpho_usdc"
+      ],
+      "positions_total": 2,
       "resolved": 0,
       "win_rate_pct": 0.0,
-      "pnl_usd": 2.3,
+      "pnl_usd": 2.66,
       "staked_usd": 400.0,
       "funded": true
     },
@@ -64,18 +68,22 @@
     "fund_75_25_balanced.stablecoin_yield": {
       "target_pct": 25,
       "target_usd": 250.0,
-      "open_exposure_usd": 402.3,
-      "drift_pct": 60.9,
+      "open_exposure_usd": 251.49,
+      "drift_pct": 0.6,
       "workers_configured": [
         "aave_usdc",
         "sgho",
         "superstate_uscc"
       ],
-      "positions_total": 1,
+      "workers_shipping": [
+        "aave_usdc",
+        "sgho"
+      ],
+      "positions_total": 2,
       "resolved": 0,
       "win_rate_pct": 0.0,
-      "pnl_usd": 2.3,
-      "staked_usd": 400.0,
+      "pnl_usd": 1.49,
+      "staked_usd": 250.0,
       "funded": true
     },
     "fund_75_25_balanced.delta_neutral": {
@@ -156,17 +164,21 @@
     "fund_90_10_growth.stablecoin_floor": {
       "target_pct": 10,
       "target_usd": 100.0,
-      "open_exposure_usd": 402.3,
-      "drift_pct": 302.3,
+      "open_exposure_usd": 100.6,
+      "drift_pct": 0.6,
       "workers_configured": [
         "aave_usdc",
         "sgho"
       ],
-      "positions_total": 1,
+      "workers_shipping": [
+        "aave_usdc",
+        "sgho"
+      ],
+      "positions_total": 2,
       "resolved": 0,
       "win_rate_pct": 0.0,
-      "pnl_usd": 2.3,
-      "staked_usd": 400.0,
+      "pnl_usd": 0.6,
+      "staked_usd": 100.0,
       "funded": true
     },
     "fund_90_10_growth.latency_arb": {
@@ -248,6 +260,6 @@
       "funded": true
     }
   },
-  "as_of": "2026-04-23T12:32:00Z",
+  "as_of": "2026-04-23T13:32:00Z",
   "source": "wukong:~/.hermes/brain/funds/"
 }

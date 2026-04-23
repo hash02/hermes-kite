@@ -98,6 +98,12 @@ def compute_fund_status(fund_id: str, fund_cfg: dict, positions: list, capital: 
         w = p.get("worker", "")
         if w not in worker_to_sleeve:
             continue
+        # If a position is fund-scoped (workers that ship per-sleeve sizing tag
+        # positions with `fund`), only attribute it to its own fund. Legacy
+        # untagged positions still attribute to every fund that lists the worker.
+        pos_fund = p.get("fund")
+        if pos_fund and pos_fund != fund_id:
+            continue
         sleeve_id = worker_to_sleeve[w]
         s = sleeve_agg[sleeve_id]
         s["positions"] += 1
