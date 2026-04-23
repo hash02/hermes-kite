@@ -37,28 +37,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
 
+from policy import sleeve_targets_for, worker_cfg
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# --- Config ---
-MIN_ANNUALIZED_RATE = 8.0         # % annualized, absolute
-MAX_POSITION_USD = 50.0
-MIN_FUNDING_HISTORY_HOURS = 24    # 3 cycles of same-sign history
-UNWIND_ON_SIGN_FLIP = True
-# In paper mode, allow a position on the first sighting of a qualifying |rate|
-# without waiting for same-sign confirmation. Live mode must flip this off.
-PAPER_MODE_RELAXED_GATE = True
+WORKER_NAME = "delta_neutral_funding"
 
-# Per-sleeve deployment target (USD). Slot count derives from
-# ceil(target / MAX_POSITION_USD) so each sleeve fills its plan.
-SLEEVE_TARGETS = {
+# --- Config (policy-driven; built-in defaults below if policy.json missing) ---
+_cfg = worker_cfg(WORKER_NAME)
+MIN_ANNUALIZED_RATE = _cfg.get("min_annualized_rate_pct", 8.0)
+MAX_POSITION_USD = _cfg.get("max_position_usd", 50.0)
+MIN_FUNDING_HISTORY_HOURS = _cfg.get("min_funding_history_hours", 24)
+UNWIND_ON_SIGN_FLIP = _cfg.get("unwind_on_sign_flip", True)
+PAPER_MODE_RELAXED_GATE = _cfg.get("paper_mode_relaxed_gate", True)
+
+_FALLBACK_TARGETS = {
     "fund_60_40_income.delta_neutral": 250.0,
     "fund_75_25_balanced.delta_neutral": 200.0,
 }
+SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
 
 BINANCE_FUNDING_URL = "https://fapi.binance.com/fapi/v1/premiumIndex"
-
-WORKER_NAME = "delta_neutral_funding"
 
 HOME = Path.home()
 HERMES = HOME / ".hermes" / "brain"

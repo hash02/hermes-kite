@@ -31,6 +31,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from policy import sleeve_targets_for
+
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
 STATUS_FILE = HERMES / "status" / "morpho_usdc.json"
@@ -38,11 +40,8 @@ STATUS_FILE = HERMES / "status" / "morpho_usdc.json"
 WORKER_NAME = "morpho_usdc"
 SYMBOL = "MORPHO_BLUE_USDC_ETH"
 
-# 60/40 stablecoin_yield target $400, splitting 3 ways with aave + euler.
-# $400/3 ≈ $133.33.
-SLEEVE_TARGETS = {
-    "fund_60_40_income.stablecoin_yield": 133.33,
-}
+_FALLBACK_TARGETS = {"fund_60_40_income.stablecoin_yield": 133.33}
+SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
 
 POOL_ID = "cefa9ef5-c4eb-4a3f-924b-b8a3bf6f25e5"
 CHART_URL = f"https://yields.llama.fi/chart/{POOL_ID}"

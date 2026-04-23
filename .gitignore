@@ -5,3 +5,4 @@ __pycache__/
 wallet.json
 data/portfolio_local.json
 .venv/
+exports/

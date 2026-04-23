@@ -31,6 +31,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from policy import sleeve_targets_for, worker_cfg
+
 WORKER_NAME = "pyth_momentum"
 
 HERMES = Path.home() / ".hermes" / "brain"
@@ -46,20 +48,15 @@ UNIVERSE = [
     {"symbol": "LINK", "feed_id": "8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221", "tv": "Crypto.LINK/USD"},
 ]
 
-SLEEVE_TARGETS = {
-    # 75/25 directional $200 split with polymarket ($200 polymarket already,
-    # so pyth overlaps — routed via `fund`/`sleeve` tag so the router
-    # attributes them to this worker's side of the sleeve separately).
-    # Practical allocation: pyth takes $100, polymarket $100. But because
-    # polymarket's config already claims the full $200, we run pyth at $100
-    # which lets the fund_router show a layered allocation.
-    "fund_75_25_balanced.directional": 100.00,
-}
-FAST_EMA_MINUTES = 30
-SLOW_EMA_MINUTES = 120
-ENTRY_GAP_PCT = 0.25       # fast must be this % above slow to enter
-EXIT_GAP_PCT = -0.25       # flip signal
-STOP_LOSS_PCT = -6.0
+_FALLBACK_TARGETS = {"fund_75_25_balanced.directional": 100.00}
+SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
+
+_cfg = worker_cfg(WORKER_NAME)
+FAST_EMA_MINUTES = _cfg.get("fast_ema_minutes", 30)
+SLOW_EMA_MINUTES = _cfg.get("slow_ema_minutes", 120)
+ENTRY_GAP_PCT = _cfg.get("entry_gap_pct", 0.25)
+EXIT_GAP_PCT = _cfg.get("exit_gap_pct", -0.25)
+STOP_LOSS_PCT = _cfg.get("stop_loss_pct", -6.0)
 
 HERMES_LATEST = "https://hermes.pyth.network/api/latest_price_feeds"
 PYTH_HISTORY = "https://benchmarks.pyth.network/v1/shims/tradingview/history"

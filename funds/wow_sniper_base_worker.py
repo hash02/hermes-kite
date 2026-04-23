@@ -27,24 +27,26 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from policy import sleeve_targets_for, worker_cfg
+
 WORKER_NAME = "wow_sniper_base"
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
 STATUS_FILE = HERMES / "status" / f"{WORKER_NAME}.json"
 STATE_FILE = HERMES / "state" / f"{WORKER_NAME}_state.json"
 
-SLEEVE_TARGETS = {
-    "fund_90_10_growth.memecoin_sniper": 50.00,  # half of $100 sleeve (crypto_memecoins takes the other)
-}
+_FALLBACK_TARGETS = {"fund_90_10_growth.memecoin_sniper": 50.00}
+SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
 
-MAX_OPEN_POSITIONS = 5           # $50 / 5 = $10 per micro-cap trade
-ENTRY_24H_PCT = 30.0             # needs +30% 24h to enter
-EXIT_24H_PCT = -10.0             # exit on momentum fade
-STOP_LOSS_PCT = -25.0            # hard stop
-MAX_PAIR_AGE_DAYS = 14           # only fresh tokens at entry
-MAX_FDV_USD = 10_000_000
-MIN_24H_BUY_VOL_USD = 50_000
-STALE_EXIT_DAYS = 60
+_cfg = worker_cfg(WORKER_NAME)
+MAX_OPEN_POSITIONS = _cfg.get("max_open_positions", 5)
+ENTRY_24H_PCT = _cfg.get("entry_24h_pct", 30.0)
+EXIT_24H_PCT = _cfg.get("exit_24h_pct", -10.0)
+STOP_LOSS_PCT = _cfg.get("stop_loss_pct", -25.0)
+MAX_PAIR_AGE_DAYS = _cfg.get("max_pair_age_days", 14)
+MAX_FDV_USD = _cfg.get("max_fdv_usd", 10_000_000)
+MIN_24H_BUY_VOL_USD = _cfg.get("min_24h_buy_vol_usd", 50_000)
+STALE_EXIT_DAYS = _cfg.get("stale_exit_days", 60)
 
 DEX_SEARCH = "https://api.dexscreener.com/latest/dex/search?q=base"
 DEX_PAIR = "https://api.dexscreener.com/latest/dex/tokens/"

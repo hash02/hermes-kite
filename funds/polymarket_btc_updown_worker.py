@@ -27,23 +27,24 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from policy import sleeve_targets_for, worker_cfg
+
 WORKER_NAME = 'polymarket_btc_updown'
 PORTFOLIO_FILE = Path.home() / '.hermes/brain/paper_portfolio.json'
 STATUS_FILE = Path.home() / '.hermes/brain/status/polymarket_btc_updown.json'
 STATE_FILE = Path.home() / '.hermes/brain/state/polymarket_btc_updown_state.json'
 GAMMA_URL = 'https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=500&order=volumeNum&ascending=false'
 
-MAX_POSITION_USD = 40.00
-MIN_LIQUIDITY_USD = 10000
-YES_PRICE_CEILING = 0.10  # only trade extreme longshots (buy NO)
+_cfg = worker_cfg(WORKER_NAME)
+MAX_POSITION_USD = _cfg.get("max_position_usd", 40.00)
+MIN_LIQUIDITY_USD = _cfg.get("min_liquidity_usd", 10000)
+YES_PRICE_CEILING = _cfg.get("yes_price_ceiling", 0.10)
 
-# Per-sleeve target deployment (USD). Slot count derives from
-# ceil(target / MAX_POSITION_USD). Same candidate pool feeds both sleeves;
-# each sleeve gets its own attribution via the `fund` tag.
-SLEEVE_TARGETS = {
+_FALLBACK_TARGETS = {
     'fund_75_25_balanced.directional': 200.00,
     'fund_90_10_growth.latency_arb': 300.00,
 }
+SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
 
 log = logging.getLogger(WORKER_NAME)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')

@@ -19,7 +19,9 @@ from __future__ import annotations
 import json
 import urllib.request
 from yield_base import YieldConfig, run_yield
+from policy import sleeve_targets_for
 
+WORKER_NAME = "superstate_uscc"
 
 # Superstate publishes fund NAV + net yield on a public API. Schema:
 #   https://api.superstate.co/v1/funds/uscc  ->  {"net_yield_30d": "4.82", ...}
@@ -46,13 +48,12 @@ def fetch_uscc_apy() -> tuple[float | None, str]:
     return None, ""
 
 
+_FALLBACK_TARGETS = {"fund_75_25_balanced.stablecoin_yield": 83.33}
+
 CONFIG = YieldConfig(
-    worker_name="superstate_uscc",
+    worker_name=WORKER_NAME,
     symbol="SUPERSTATE_USCC",
-    # 75/25 stablecoin_yield target $250, splitting 3 ways with aave + sgho.
-    sleeve_targets={
-        "fund_75_25_balanced.stablecoin_yield": 83.33,
-    },
+    sleeve_targets=sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS,
     apy_fetcher=fetch_uscc_apy,
     protocol="superstate-uscc",
     chain="ethereum",

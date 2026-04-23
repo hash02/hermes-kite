@@ -22,21 +22,23 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from policy import sleeve_targets_for, worker_cfg
+
 WORKER_NAME = "crypto_memecoins"
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
 STATUS_FILE = HERMES / "status" / f"{WORKER_NAME}.json"
 STATE_FILE = HERMES / "state" / f"{WORKER_NAME}_state.json"
 
-SLEEVE_TARGETS = {
-    "fund_90_10_growth.memecoin_sniper": 50.00,  # half of $100 sleeve (wow_sniper_base takes the other half)
-}
+_FALLBACK_TARGETS = {"fund_90_10_growth.memecoin_sniper": 50.00}
+SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
 
-MAX_OPEN_POSITIONS = 5           # $50 / 5 = $10 per position
-ENTRY_7D_PCT = 20.0              # must be +20% over 7 days to enter
-EXIT_7D_PCT = -10.0              # exit on momentum fade
-STOP_LOSS_PCT = -20.0            # hard stop from entry
-MIN_MARKET_CAP_USD = 100_000_000  # top-tier memecoins only
+_cfg = worker_cfg(WORKER_NAME)
+MAX_OPEN_POSITIONS = _cfg.get("max_open_positions", 5)
+ENTRY_7D_PCT = _cfg.get("entry_7d_pct", 20.0)
+EXIT_7D_PCT = _cfg.get("exit_7d_pct", -10.0)
+STOP_LOSS_PCT = _cfg.get("stop_loss_pct", -20.0)
+MIN_MARKET_CAP_USD = _cfg.get("min_market_cap_usd", 100_000_000)
 
 CG_URL = (
     "https://api.coingecko.com/api/v3/coins/markets"

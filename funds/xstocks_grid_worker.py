@@ -25,6 +25,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from policy import sleeve_targets_for, worker_cfg
+
 WORKER_NAME = 'xstocks_grid'
 PORTFOLIO_FILE = Path.home() / '.hermes/brain/paper_portfolio.json'
 STATUS_FILE = Path.home() / '.hermes/brain/status/xstocks_grid.json'
@@ -36,12 +38,12 @@ BASKET = [
     {'symbol': 'COINx', 'stooq': 'coin.us', 'underlying': 'COIN'},
     {'symbol': 'MSTRx', 'stooq': 'mstr.us', 'underlying': 'MSTR'},
 ]
-# Sleeve target: fund_75_25_balanced.tokenized_stocks = $50.
-# 4 basket symbols → $12.50 per position lands the sleeve on target.
-PRINCIPAL_USD = 12.50
-DOUBLE_DOWN_DROP_PCT = 5.0   # add if down >=5% from avg entry
-TRIM_RISE_PCT = 10.0         # realize half if up >=10% from avg entry
-FUND_SLEEVES = ['fund_75_25_balanced.tokenized_stocks']
+_cfg = worker_cfg('xstocks_grid')
+_targets = sleeve_targets_for('xstocks_grid')
+FUND_SLEEVES = list(_targets.keys()) or ['fund_75_25_balanced.tokenized_stocks']
+PRINCIPAL_USD = next(iter(_targets.values()), 12.50) if _targets else 12.50
+DOUBLE_DOWN_DROP_PCT = _cfg.get('double_down_drop_pct', 5.0)
+TRIM_RISE_PCT = _cfg.get('trim_rise_pct', 10.0)
 
 log = logging.getLogger(WORKER_NAME)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')

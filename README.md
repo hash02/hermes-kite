@@ -171,6 +171,39 @@ python3 funds/aave_usdc_worker.py
 python3 onchain/kite_executor.py  # settle latest portfolio delta on Kite
 ```
 
+## Config (`config/policy.json`)
+
+Every knob that used to be hardcoded — fund allocations, per-sleeve sizing, worker thresholds (EMA windows, entry gates, stop-losses, grid bands) — lives in one file: [`config/policy.json`](config/policy.json). Workers load it via [`funds/policy.py`](funds/policy.py) at cycle start; if the file is missing they fall back to built-in defaults (so legacy environments keep running). Edit the JSON, re-run the worker, new values take effect next cycle — no code changes. Schema in [`config/README.md`](config/README.md).
+
+```python
+# In every worker:
+from policy import sleeve_targets_for, worker_cfg
+SLEEVE_TARGETS = sleeve_targets_for("aave_usdc") or _FALLBACK_TARGETS
+_cfg = worker_cfg("delta_neutral_funding")
+MIN_ANNUALIZED_RATE = _cfg.get("min_annualized_rate_pct", 8.0)
+```
+
+Reserved `risk` block in the same file holds math-engine inputs (Kelly fraction, target portfolio vol, drawdown halt). `engine_enabled: false` today — when flipped on, the planned `funds/risk_engine.py` will derive sizing dynamically from realized vol + correlation instead of the static `principal_usd` values; the static values then serve as boot config.
+
+## CSV export on demand
+
+Any time you want reporting-grade CSVs of the current state, run:
+
+```bash
+python3 scripts/export_csv.py                                  # everything to ./exports/
+python3 scripts/export_csv.py --output-dir exports/2026-04-23
+python3 scripts/export_csv.py --fund fund_75_25_balanced       # filter to one fund
+python3 scripts/export_csv.py --since 2026-04-20T00:00:00Z     # only positions from this date
+```
+
+Emits:
+- `funds.csv` — per-fund aggregates (capital, open, staked, PnL, coverage)
+- `sleeves.csv` — per-sleeve detail (target, drift, positions, win-rate, PnL, shipping workers)
+- `positions.csv` — every position, open + resolved
+- `trades.csv` — resolved positions only (trade log)
+- `settlements.csv` — on-chain markers (nonce, sleeve, tx hash, content hash)
+- `manifest.json` — provenance (generated_at, source snapshot `as_of`, filters used)
+
 ## License
 
 MIT

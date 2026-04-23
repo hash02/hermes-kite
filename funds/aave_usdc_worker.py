@@ -32,6 +32,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from policy import sleeve_targets_for
+
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
 STATUS_FILE = HERMES / "status" / "aave_usdc.json"
@@ -39,18 +41,15 @@ STATUS_FILE = HERMES / "status" / "aave_usdc.json"
 WORKER_NAME = "aave_usdc"
 SYMBOL = "AAVE_V3_USDC_ETH"
 
-# Per-sleeve principal. Sized so each sleeve hits its target_usd when summed
-# across all configured workers. Update when sibling workers ship/retire.
-SLEEVE_TARGETS = {
-    # 60/40 stablecoin_yield target $400, all 3 configured workers shipping
-    # (aave + morpho + euler). $400/3 ≈ $133.33.
+# Per-sleeve principal. Loaded from config/policy.json via policy.sleeve_targets_for().
+# Built-in fallback kicks in if the policy file is missing — keeps the worker
+# runnable in legacy environments.
+_FALLBACK_TARGETS = {
     "fund_60_40_income.stablecoin_yield": 133.34,
-    # 75/25 stablecoin_yield target $250, all 3 configured workers shipping
-    # (aave + sgho + superstate_uscc). $250/3 ≈ $83.33.
     "fund_75_25_balanced.stablecoin_yield": 83.34,
-    # 90/10 stablecoin_floor target $100, configured: aave + sgho. Each takes $50.
     "fund_90_10_growth.stablecoin_floor": 50.00,
 }
+SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
 
 POOL_ID = "aa70268e-4b52-42bf-a116-608b370f9501"
 CHART_URL = f"https://yields.llama.fi/chart/{POOL_ID}"

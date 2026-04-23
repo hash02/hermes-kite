@@ -1,0 +1,214 @@
+{
+  "_schema_version": "v1",
+  "_notes": [
+    "Policy source of truth for Hermes on Kite. Workers read knobs from here",
+    "instead of hardcoding. funds/policy.py exposes fund_cfg / sleeve_cfg /",
+    "worker_cfg / sleeve_targets_for helpers. See config/README.md for schema.",
+    "Missing file -> workers fall back to their built-in defaults (safe)."
+  ],
+
+  "funds": {
+    "fund_60_40_income": {
+      "name": "FUND 60/40 — Hermes Steady Monthly Income",
+      "capital_usd": 1000,
+      "target_annual_return_pct": 7.4,
+      "max_drawdown_pct": 5.0,
+      "payout_cadence": "monthly",
+      "sleeves": {
+        "stablecoin_yield": {
+          "target_pct": 40,
+          "workers": {
+            "aave_usdc":   { "principal_usd": 133.34 },
+            "morpho_usdc": { "principal_usd": 133.33 },
+            "euler_pyusd": { "principal_usd": 133.33 }
+          }
+        },
+        "delta_neutral": {
+          "target_pct": 25,
+          "workers": {
+            "delta_neutral_funding": { "target_deployment_usd": 250.00 }
+          }
+        },
+        "structural_grid": {
+          "target_pct": 25,
+          "workers": {
+            "grid_eth_usdc": { "target_deployment_usd": 125.00 },
+            "grid_stables":  { "target_deployment_usd": 125.00 }
+          }
+        },
+        "cash": { "target_pct": 10, "workers": {} }
+      }
+    },
+
+    "fund_75_25_balanced": {
+      "name": "FUND 75/25 — Hermes Quarterly Balanced",
+      "capital_usd": 1000,
+      "target_annual_return_pct": 11.1,
+      "max_drawdown_pct": 10.0,
+      "payout_cadence": "quarterly",
+      "sleeves": {
+        "stablecoin_yield": {
+          "target_pct": 25,
+          "workers": {
+            "aave_usdc":        { "principal_usd": 83.34 },
+            "sgho":             { "principal_usd": 83.33 },
+            "superstate_uscc":  { "principal_usd": 83.33 }
+          }
+        },
+        "delta_neutral": {
+          "target_pct": 20,
+          "workers": {
+            "delta_neutral_funding": { "target_deployment_usd": 200.00 }
+          }
+        },
+        "structural_grid": {
+          "target_pct": 25,
+          "workers": {
+            "grid_eth_usdc": { "target_deployment_usd": 125.00 },
+            "grid_btc_usdc": { "target_deployment_usd": 125.00 }
+          }
+        },
+        "directional": {
+          "target_pct": 20,
+          "workers": {
+            "pyth_momentum":          { "target_deployment_usd": 100.00 },
+            "polymarket_btc_updown":  { "target_deployment_usd": 100.00 }
+          }
+        },
+        "tokenized_stocks": {
+          "target_pct": 5,
+          "workers": {
+            "xstocks_grid": { "principal_usd_per_symbol": 12.50 }
+          }
+        },
+        "cash": { "target_pct": 5, "workers": {} }
+      }
+    },
+
+    "fund_90_10_growth": {
+      "name": "FUND 90/10 — Hermes Annual Growth Machine",
+      "capital_usd": 1000,
+      "target_annual_return_pct": 34.0,
+      "max_drawdown_pct": 25.0,
+      "payout_cadence": "annual",
+      "sleeves": {
+        "stablecoin_floor": {
+          "target_pct": 10,
+          "workers": {
+            "aave_usdc": { "principal_usd": 50.00 },
+            "sgho":      { "principal_usd": 50.00 }
+          }
+        },
+        "latency_arb": {
+          "target_pct": 30,
+          "workers": {
+            "polymarket_btc_updown": { "target_deployment_usd": 300.00 }
+          }
+        },
+        "aggressive_grid": {
+          "target_pct": 20,
+          "workers": {
+            "grid_eth_usdc": { "target_deployment_usd": 67.00 },
+            "grid_btc_usdc": { "target_deployment_usd": 67.00 },
+            "grid_sol":      { "target_deployment_usd": 66.00 }
+          }
+        },
+        "directional_momentum": {
+          "target_pct": 20,
+          "workers": {
+            "tv_momentum": { "principal_usd_per_symbol": 67.00 }
+          }
+        },
+        "memecoin_sniper": {
+          "target_pct": 10,
+          "workers": {
+            "crypto_memecoins":  { "target_deployment_usd": 50.00 },
+            "wow_sniper_base":   { "target_deployment_usd": 50.00 }
+          }
+        },
+        "xstocks_directional": {
+          "target_pct": 10,
+          "workers": {
+            "xstocks_directional": { "principal_usd_per_symbol": 25.00 }
+          }
+        }
+      }
+    }
+  },
+
+  "workers": {
+    "delta_neutral_funding": {
+      "min_annualized_rate_pct": 8.0,
+      "max_position_usd": 50.0,
+      "min_funding_history_hours": 24,
+      "unwind_on_sign_flip": true,
+      "paper_mode_relaxed_gate": true
+    },
+    "polymarket_btc_updown": {
+      "max_position_usd": 40.0,
+      "min_liquidity_usd": 10000,
+      "yes_price_ceiling": 0.10
+    },
+    "tv_momentum": {
+      "universe": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+      "lookback_days": 7,
+      "entry_momentum_pct": 2.0,
+      "exit_momentum_pct": -2.0,
+      "stop_loss_pct": -8.0,
+      "max_open_positions": 3
+    },
+    "xstocks_directional": {
+      "max_open_positions": 4,
+      "sma_window": 20,
+      "momentum_window": 5,
+      "entry_momentum_pct": 1.0,
+      "exit_momentum_pct": -1.0,
+      "stop_loss_pct": -7.0
+    },
+    "xstocks_grid": {
+      "double_down_drop_pct": 5.0,
+      "trim_rise_pct": 10.0
+    },
+    "pyth_momentum": {
+      "fast_ema_minutes": 30,
+      "slow_ema_minutes": 120,
+      "entry_gap_pct": 0.25,
+      "exit_gap_pct": -0.25,
+      "stop_loss_pct": -6.0
+    },
+    "crypto_memecoins": {
+      "max_open_positions": 5,
+      "entry_7d_pct": 20.0,
+      "exit_7d_pct": -10.0,
+      "stop_loss_pct": -20.0,
+      "min_market_cap_usd": 100000000
+    },
+    "wow_sniper_base": {
+      "max_open_positions": 5,
+      "entry_24h_pct": 30.0,
+      "exit_24h_pct": -10.0,
+      "stop_loss_pct": -25.0,
+      "max_pair_age_days": 14,
+      "max_fdv_usd": 10000000,
+      "min_24h_buy_vol_usd": 50000,
+      "stale_exit_days": 60
+    },
+    "grid_eth_usdc":  { "grid_half": 5, "band_pct": 0.06 },
+    "grid_btc_usdc":  { "grid_half": 5, "band_pct": 0.05 },
+    "grid_sol":       { "grid_half": 5, "band_pct": 0.08 },
+    "grid_stables":   { "grid_half": 5, "band_pct": 0.003 }
+  },
+
+  "risk": {
+    "engine_enabled": false,
+    "kelly_fraction": 0.25,
+    "target_portfolio_vol_pct": 8.0,
+    "max_concentration_per_counterparty_pct": 30,
+    "max_drawdown_halt_per_fund_pct": null,
+    "_notes": [
+      "Stubbed math-engine knobs. When engine_enabled=true, risk_engine.py",
+      "will derive position sizes from these inputs + realized vol/correlation",
+      "instead of the static per-sleeve principal_usd values above."
+    ]
+  }
+}

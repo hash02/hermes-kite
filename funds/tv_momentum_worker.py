@@ -25,25 +25,29 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from policy import sleeve_targets_for, worker_cfg
+
 WORKER_NAME = 'tv_momentum'
 PORTFOLIO_FILE = Path.home() / '.hermes/brain/paper_portfolio.json'
 STATUS_FILE = Path.home() / '.hermes/brain/status/tv_momentum.json'
 STATE_FILE = Path.home() / '.hermes/brain/state/tv_momentum_state.json'
 
-UNIVERSE = [
-    {'symbol': 'BTC', 'binance': 'BTCUSDT'},
-    {'symbol': 'ETH', 'binance': 'ETHUSDT'},
-    {'symbol': 'SOL', 'binance': 'SOLUSDT'},
-]
-# Sleeve target: fund_90_10_growth.directional_momentum = $200.
-# 3 universe symbols → $200 / 3 ≈ $67 per position.
-PRINCIPAL_USD = 67.00
-MAX_OPEN_POSITIONS = 3
-ENTRY_MOMENTUM_PCT = 2.0    # enter if 7d >= +2% (paper: any positive trend)
-EXIT_MOMENTUM_PCT = -2.0    # exit only on reversal below -2%
-STOP_LOSS_PCT = -8.0        # stop if unrealized <= -8% from entry
-LOOKBACK_DAYS = 7
-FUND_SLEEVES = ['fund_90_10_growth.directional_momentum']
+_cfg = worker_cfg(WORKER_NAME)
+_universe_syms = _cfg.get('universe', ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'])
+# Map binance symbol -> display symbol
+_SYM_BY_BINANCE = {'BTCUSDT': 'BTC', 'ETHUSDT': 'ETH', 'SOLUSDT': 'SOL'}
+UNIVERSE = [{'symbol': _SYM_BY_BINANCE.get(s, s.replace('USDT', '')), 'binance': s}
+            for s in _universe_syms]
+
+_targets = sleeve_targets_for(WORKER_NAME)
+FUND_SLEEVES = list(_targets.keys()) or ['fund_90_10_growth.directional_momentum']
+# policy.json stores `principal_usd_per_symbol` for this worker — per-position size.
+PRINCIPAL_USD = next(iter(_targets.values()), 67.00) if _targets else 67.00
+MAX_OPEN_POSITIONS = _cfg.get('max_open_positions', len(UNIVERSE))
+ENTRY_MOMENTUM_PCT = _cfg.get('entry_momentum_pct', 2.0)
+EXIT_MOMENTUM_PCT = _cfg.get('exit_momentum_pct', -2.0)
+STOP_LOSS_PCT = _cfg.get('stop_loss_pct', -8.0)
+LOOKBACK_DAYS = _cfg.get('lookback_days', 7)
 
 KLINES_URL = 'https://api.binance.com/api/v3/klines?symbol={sym}&interval=1d&limit=10'
 
