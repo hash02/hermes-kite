@@ -221,6 +221,47 @@ realized vol, vol cap, Kelly scale, drawdown halt flag, counterparty scalar,
 and final sized USD. Unit tests in `tests/test_risk_engine.py` cover each
 constraint independently.
 
+## Backtest harness (`funds/backtest.py`)
+
+Synthetic Monte Carlo over the current policy + fund set. Each simulated
+day, the risk engine (if enabled) sizes every sleeve from running state,
+then a daily return is drawn per sleeve from `Normal(mu/252, sigma/√252)`
+with `mu` / `sigma` taken from a per-strategy table (yield mu=4% vol=1%,
+grid mu=12% vol=8%, memecoin mu=30% vol=80%, sniper mu=50% vol=120%, etc.).
+Sleeve PnL = size × daily_return. Runs for N paths, reports per-fund
+distributions.
+
+```bash
+python3 funds/backtest.py                         # 252 days × 100 sims
+python3 funds/backtest.py --sims 500 --days 365
+python3 funds/backtest.py --compare               # engine ON vs OFF delta
+python3 funds/backtest.py --kelly-sweep           # sweep kelly_fraction 0.1..1.0
+python3 funds/backtest.py --fund fund_60_40_income
+python3 funds/backtest.py --output-dir exports/bt_2026-04-23  # JSON + equity CSVs
+```
+
+Reports per fund: `Sharpe`, `Sortino`, `MaxDD%`, `CAGR%`, `AnnVol%`,
+`WinRate%` at p5 / p50 / p95. Equity curves for the first 5 sims optionally
+drop to CSV for plotting.
+
+Sample output (100 sims × 252 days, engine off):
+
+```
+fund_60_40_income    p50 Sharpe 4.45   MaxDD -0.5%   CAGR 5.6%   AnnVol 1.2%
+fund_75_25_balanced  p50 Sharpe 1.54   MaxDD -3.6%   CAGR 7.6%   AnnVol 4.8%
+fund_90_10_growth    p50 Sharpe 0.94   MaxDD -10.2%  CAGR 12.1%  AnnVol 13.5%
+```
+
+`--kelly-sweep` confirms the textbook pattern — Kelly scales MaxDD, CAGR,
+and vol linearly while Sharpe is ~invariant; lower Kelly buys drawdown
+protection, not better risk-adjusted return. `--compare` shows engine ON
+trims CAGR by ~10pp on the growth fund but cuts MaxDD by ~9pp — the
+canonical Kelly tradeoff.
+
+Real-data (historical price replay) backtest is a separate follow-on PR;
+this synthetic harness validates the fund *structure* and engine
+*behavior*, not the vol parameters themselves.
+
 ## CSV export on demand
 
 Any time you want reporting-grade CSVs of the current state, run:
