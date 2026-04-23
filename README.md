@@ -30,13 +30,13 @@ All paper. Real market data. One on-chain executor sends settlement to Kite test
 |---|---:|
 | funds | 3 (60/40 income, 75/25 balanced, 90/10 growth) |
 | sleeves total | 16 |
-| sleeves funded | 9 |
-| total positions opened | 152 |
+| sleeves funded | 16 |
+| total positions opened | 204 |
 | total target capital | $3,000 |
-| total open exposure | $292.79 |
-| total cumulative stake | $533.78 |
-| cumulative PnL (paper) | $+0.08 |
-| on-chain settlement txs | 106 |
+| total open exposure | $1,868.01 |
+| total cumulative stake | $4,267.64 |
+| cumulative PnL (paper) | $+7.47 |
+| on-chain settlement txs | 106 (8 new sleeve hashes pending next :32 cron) |
 | live signals dashboard | https://bionicbanker.tech/signals/ |
 | live portfolio dashboard | https://bionicbanker.tech/portfolio/ |
 
@@ -119,7 +119,7 @@ Self-attested for the hackathon scope. Upgrades to the full Kite Passport CLI + 
 
 Settlement marker txs on Kite testnet (chain 2368), wallet `0xA29fF03ABfd219e3c76D1C18653297B8201B7748`. Each tx data decodes to `hermes-kite:AGENT_ID:SLEEVE:SHA256`.
 
-**Live count as of 2026-04-22T02:37:37Z:** 106 on-chain settlements, nonces 9 → 114, across all 16 sleeves. Hourly cron at `:32` keeps writing markers. Re-runs without new sleeve flips print `nothing to settle` — idempotent by design.
+**Live count as of 2026-04-23T12:32:00Z:** 106 on-chain settlements, nonces 9 → 114. Coverage just expanded from 9 to 16 of 16 sleeves; the 8 newly-filled sleeve hashes are queued for the next `:32` cron tick. Hourly cron keeps writing markers. Re-runs without new sleeve flips print `nothing to settle` — idempotent by design.
 
 | sleeve | settlements | latest on-chain marker |
 |---|---:|---|

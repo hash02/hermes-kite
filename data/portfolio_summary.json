@@ -3,34 +3,34 @@
     "fund_60_40_income.stablecoin_yield": {
       "target_pct": 40,
       "target_usd": 400.0,
-      "open_exposure_usd": 0.0,
-      "drift_pct": -100.0,
+      "open_exposure_usd": 402.3,
+      "drift_pct": 0.6,
       "workers_configured": [
         "aave_usdc",
         "morpho_usdc",
         "euler_pyusd"
       ],
-      "positions_total": 0,
+      "positions_total": 1,
       "resolved": 0,
       "win_rate_pct": 0.0,
-      "pnl_usd": 0.0,
-      "staked_usd": 0.0,
-      "funded": false
+      "pnl_usd": 2.3,
+      "staked_usd": 400.0,
+      "funded": true
     },
     "fund_60_40_income.delta_neutral": {
       "target_pct": 25,
       "target_usd": 250.0,
-      "open_exposure_usd": 0.0,
-      "drift_pct": -100.0,
+      "open_exposure_usd": 100.16,
+      "drift_pct": -59.9,
       "workers_configured": [
         "delta_neutral_funding"
       ],
-      "positions_total": 0,
-      "resolved": 0,
-      "win_rate_pct": 0.0,
-      "pnl_usd": 0.0,
-      "staked_usd": 0.0,
-      "funded": false
+      "positions_total": 18,
+      "resolved": 16,
+      "win_rate_pct": 56.3,
+      "pnl_usd": 0.32,
+      "staked_usd": 900.0,
+      "funded": true
     },
     "fund_60_40_income.structural_grid": {
       "target_pct": 25,
@@ -64,34 +64,34 @@
     "fund_75_25_balanced.stablecoin_yield": {
       "target_pct": 25,
       "target_usd": 250.0,
-      "open_exposure_usd": 0.0,
-      "drift_pct": -100.0,
+      "open_exposure_usd": 402.3,
+      "drift_pct": 60.9,
       "workers_configured": [
         "aave_usdc",
         "sgho",
         "superstate_uscc"
       ],
-      "positions_total": 0,
+      "positions_total": 1,
       "resolved": 0,
       "win_rate_pct": 0.0,
-      "pnl_usd": 0.0,
-      "staked_usd": 0.0,
-      "funded": false
+      "pnl_usd": 2.3,
+      "staked_usd": 400.0,
+      "funded": true
     },
     "fund_75_25_balanced.delta_neutral": {
       "target_pct": 20,
       "target_usd": 200.0,
-      "open_exposure_usd": 0.0,
-      "drift_pct": -100.0,
+      "open_exposure_usd": 100.16,
+      "drift_pct": -49.9,
       "workers_configured": [
         "delta_neutral_funding"
       ],
-      "positions_total": 0,
-      "resolved": 0,
-      "win_rate_pct": 0.0,
-      "pnl_usd": 0.0,
-      "staked_usd": 0.0,
-      "funded": false
+      "positions_total": 18,
+      "resolved": 16,
+      "win_rate_pct": 56.3,
+      "pnl_usd": 0.32,
+      "staked_usd": 900.0,
+      "funded": true
     },
     "fund_75_25_balanced.structural_grid": {
       "target_pct": 25,
@@ -112,33 +112,33 @@
     "fund_75_25_balanced.directional": {
       "target_pct": 20,
       "target_usd": 200.0,
-      "open_exposure_usd": 0.0,
-      "drift_pct": -100.0,
+      "open_exposure_usd": 80.0,
+      "drift_pct": -60.0,
       "workers_configured": [
         "pyth_momentum",
         "polymarket_btc_updown"
       ],
-      "positions_total": 0,
-      "resolved": 0,
-      "win_rate_pct": 0.0,
-      "pnl_usd": 0.0,
-      "staked_usd": 0.0,
-      "funded": false
+      "positions_total": 8,
+      "resolved": 5,
+      "win_rate_pct": 80.0,
+      "pnl_usd": -0.15,
+      "staked_usd": 320.0,
+      "funded": true
     },
     "fund_75_25_balanced.tokenized_stocks": {
       "target_pct": 5,
       "target_usd": 50.0,
-      "open_exposure_usd": 0.0,
-      "drift_pct": -100.0,
+      "open_exposure_usd": 48.2,
+      "drift_pct": -3.6,
       "workers_configured": [
         "xstocks_grid"
       ],
-      "positions_total": 0,
-      "resolved": 0,
-      "win_rate_pct": 0.0,
-      "pnl_usd": 0.0,
-      "staked_usd": 0.0,
-      "funded": false
+      "positions_total": 6,
+      "resolved": 1,
+      "win_rate_pct": 100.0,
+      "pnl_usd": 0.35,
+      "staked_usd": 165.0,
+      "funded": true
     },
     "fund_75_25_balanced.cash": {
       "target_pct": 5,
@@ -156,33 +156,33 @@
     "fund_90_10_growth.stablecoin_floor": {
       "target_pct": 10,
       "target_usd": 100.0,
-      "open_exposure_usd": 0.0,
-      "drift_pct": -100.0,
+      "open_exposure_usd": 402.3,
+      "drift_pct": 302.3,
       "workers_configured": [
         "aave_usdc",
         "sgho"
       ],
-      "positions_total": 0,
+      "positions_total": 1,
       "resolved": 0,
       "win_rate_pct": 0.0,
-      "pnl_usd": 0.0,
-      "staked_usd": 0.0,
-      "funded": false
+      "pnl_usd": 2.3,
+      "staked_usd": 400.0,
+      "funded": true
     },
     "fund_90_10_growth.latency_arb": {
       "target_pct": 30,
       "target_usd": 300.0,
-      "open_exposure_usd": 0.0,
-      "drift_pct": -100.0,
+      "open_exposure_usd": 80.0,
+      "drift_pct": -73.3,
       "workers_configured": [
         "polymarket_btc_updown"
       ],
-      "positions_total": 0,
-      "resolved": 0,
-      "win_rate_pct": 0.0,
-      "pnl_usd": 0.0,
-      "staked_usd": 0.0,
-      "funded": false
+      "positions_total": 8,
+      "resolved": 5,
+      "win_rate_pct": 80.0,
+      "pnl_usd": -0.15,
+      "staked_usd": 320.0,
+      "funded": true
     },
     "fund_90_10_growth.aggressive_grid": {
       "target_pct": 20,
@@ -248,6 +248,6 @@
       "funded": true
     }
   },
-  "as_of": "2026-04-21T07:55:17Z",
+  "as_of": "2026-04-23T12:32:00Z",
   "source": "wukong:~/.hermes/brain/funds/"
 }
