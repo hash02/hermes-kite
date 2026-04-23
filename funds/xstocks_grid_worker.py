@@ -36,7 +36,9 @@ BASKET = [
     {'symbol': 'COINx', 'stooq': 'coin.us', 'underlying': 'COIN'},
     {'symbol': 'MSTRx', 'stooq': 'mstr.us', 'underlying': 'MSTR'},
 ]
-PRINCIPAL_USD = 30.00
+# Sleeve target: fund_75_25_balanced.tokenized_stocks = $50.
+# 4 basket symbols → $12.50 per position lands the sleeve on target.
+PRINCIPAL_USD = 12.50
 DOUBLE_DOWN_DROP_PCT = 5.0   # add if down >=5% from avg entry
 TRIM_RISE_PCT = 10.0         # realize half if up >=10% from avg entry
 FUND_SLEEVES = ['fund_75_25_balanced.tokenized_stocks']
@@ -116,6 +118,8 @@ def run_once():
             pos = {
                 'id': f"xstocks_grid_{item['symbol']}",
                 'worker': WORKER_NAME,
+                'fund': FUND_SLEEVES[0].split('.', 1)[0],
+                'sleeve': FUND_SLEEVES[0],
                 'symbol': item['symbol'],
                 'underlying': item['underlying'],
                 'direction': 'long',

@@ -35,7 +35,9 @@ UNIVERSE = [
     {'symbol': 'ETH', 'binance': 'ETHUSDT'},
     {'symbol': 'SOL', 'binance': 'SOLUSDT'},
 ]
-PRINCIPAL_USD = 40.00
+# Sleeve target: fund_90_10_growth.directional_momentum = $200.
+# 3 universe symbols → $200 / 3 ≈ $67 per position.
+PRINCIPAL_USD = 67.00
 MAX_OPEN_POSITIONS = 3
 ENTRY_MOMENTUM_PCT = 2.0    # enter if 7d >= +2% (paper: any positive trend)
 EXIT_MOMENTUM_PCT = -2.0    # exit only on reversal below -2%
@@ -138,6 +140,8 @@ def run_once():
             pos = {
                 'id': f'tv_momentum_{item["symbol"]}',
                 'worker': WORKER_NAME,
+                'fund': FUND_SLEEVES[0].split('.', 1)[0],
+                'sleeve': FUND_SLEEVES[0],
                 'symbol': item['symbol'],
                 'binance_symbol': item['binance'],
                 'direction': 'long',

@@ -38,9 +38,10 @@ STATUS_FILE = HERMES / "status" / "morpho_usdc.json"
 WORKER_NAME = "morpho_usdc"
 SYMBOL = "MORPHO_BLUE_USDC_ETH"
 
-# 60/40 stablecoin_yield target $400, sharing with aave_usdc — each takes $200.
+# 60/40 stablecoin_yield target $400, splitting 3 ways with aave + euler.
+# $400/3 ≈ $133.33.
 SLEEVE_TARGETS = {
-    "fund_60_40_income.stablecoin_yield": 200.00,
+    "fund_60_40_income.stablecoin_yield": 133.33,
 }
 
 POOL_ID = "cefa9ef5-c4eb-4a3f-924b-b8a3bf6f25e5"

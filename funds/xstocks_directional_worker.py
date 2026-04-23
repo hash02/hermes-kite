@@ -41,7 +41,9 @@ UNIVERSE = [
     {'symbol': 'GOOGLx', 'yahoo': 'GOOGL', 'underlying': 'GOOGL'},
 ]
 
-PRINCIPAL_USD = 35.00
+# Sleeve target: fund_90_10_growth.xstocks_directional = $100.
+# 4 universe symbols → $25 per position keeps full coverage on target.
+PRINCIPAL_USD = 25.00
 MAX_OPEN_POSITIONS = 4
 SMA_WINDOW = 20
 MOMENTUM_WINDOW = 5
@@ -175,6 +177,8 @@ def run_once():
                 new_pos = {
                     'id': f'{WORKER_NAME}_{u["symbol"]}_{int(datetime.now().timestamp())}',
                     'worker': WORKER_NAME,
+                    'fund': FUND_SLEEVES[0].split('.', 1)[0],
+                    'sleeve': FUND_SLEEVES[0],
                     'symbol': u['symbol'],
                     'underlying': u['underlying'],
                     'side': 'long',

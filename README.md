@@ -31,12 +31,13 @@ All paper. Real market data. One on-chain executor sends settlement to Kite test
 | funds | 3 (60/40 income, 75/25 balanced, 90/10 growth) |
 | sleeves total | 16 |
 | sleeves funded | 16 |
-| total positions opened | 207 |
+| total positions opened | 310 |
 | total target capital | $3,000 |
-| total open exposure | $1,415.86 |
-| total cumulative stake | $3,817.64 |
-| cumulative PnL (paper) | $+5.32 |
-| on-chain settlement txs | 106 (8 new sleeve hashes pending next :32 cron) |
+| total open exposure | $2,631.98 |
+| total cumulative stake | $7,919.76 |
+| cumulative PnL (paper) | $+7.36 |
+| sleeves at <1% drift | 10 of 16 |
+| on-chain settlement txs | 106 (16 sleeve hashes refreshed; pending next :32 cron) |
 | live signals dashboard | https://bionicbanker.tech/signals/ |
 | live portfolio dashboard | https://bionicbanker.tech/portfolio/ |
 
@@ -72,16 +73,18 @@ No daemons. No long-lived processes. Every worker is a cron job that runs once, 
 
 ## Scanners shipping in this repo
 
-| Worker | Feed | Sleeve |
+| Worker | Feed | Sleeve(s) |
 |---|---|---|
 | `aave_usdc_worker.py` | DeFiLlama Aave V3 Ethereum USDC supply APY | stablecoin_yield / stablecoin_floor (per-sleeve sizing) |
 | `morpho_usdc_worker.py` | DeFiLlama Morpho Blue USDC vault APY | stablecoin_yield (60/40) |
+| `euler_pyusd_worker.py` | DeFiLlama Euler V2 PYUSD vault APY | stablecoin_yield (60/40) |
 | `sgho_worker.py` | DeFiLlama sGHO (Aave Savings GHO) APY | stablecoin_yield / stablecoin_floor (75/25 + 90/10) |
-| `delta_neutral_worker.py` | Binance perp funding + spot | delta_neutral |
-| `polymarket_btc_updown_worker.py` | Polymarket Gamma API BTC daily up/down | event_edge |
-| `xstocks_grid_worker.py` | xStocks tokenized equity price | equity_grid |
-| `xstocks_directional_worker.py` | xStocks + volume | equity_directional |
-| `tv_momentum_worker.py` | TradingView RSS momentum scan | momentum |
+| `delta_neutral_worker.py` | Binance perp funding + spot | delta_neutral (per-sleeve sizing) |
+| `polymarket_btc_updown_worker.py` | Polymarket Gamma API BTC longshots | directional / latency_arb (per-sleeve sizing) |
+| `grid_eth_usdc_worker.py` | Binance ETH/USDC spot + 24h klines pivot | structural_grid / aggressive_grid (per-sleeve sizing) |
+| `xstocks_grid_worker.py` | xStocks tokenized equity price | tokenized_stocks |
+| `xstocks_directional_worker.py` | xStocks + Yahoo Finance momentum | xstocks_directional |
+| `tv_momentum_worker.py` | Binance daily klines 7d momentum | directional_momentum |
 
 ## Kite integration
 

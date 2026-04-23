@@ -2,9 +2,13 @@
 '''
 polymarket_btc_updown_worker — paper scanner for BTC binary markets.
 
+Per-sleeve fund coverage. Each sleeve in SLEEVE_TARGETS gets its own pool of
+NO positions sized to that sleeve's target deployment, tagged with `fund` so
+fund_router attributes them only to the owning fund.
+
 Contract (matches aave_usdc + delta_neutral_funding):
-  - Tags paper positions with worker='polymarket_btc_updown'
-  - Upserts into ~/.hermes/brain/paper_portfolio.json (list of position dicts)
+  - Tags positions with worker='polymarket_btc_updown', fund=<fund_id>, sleeve=<sleeve_id>
+  - Upserts into ~/.hermes/brain/paper_portfolio.json
   - Emits status at ~/.hermes/brain/status/polymarket_btc_updown.json
 
 Strategy (paper, MVP — edge is real but thin, sizing tiny):
@@ -13,11 +17,10 @@ Strategy (paper, MVP — edge is real but thin, sizing tiny):
   - Open NO position when YES price < 0.10 (buy at ~$1 - yes_price; near-certain payoff)
   - Mark-to-market each cycle: size_usd = principal * (current_no_price / entry_no_price)
   - Resolve when endDate passes (snapshot final no_price, set resolved=True)
-
-Fund coverage: fund_75_25_balanced.directional + fund_90_10_growth.latency_arb
 '''
 import json
 import logging
+import math
 import os
 import time
 import urllib.request
@@ -30,14 +33,17 @@ STATUS_FILE = Path.home() / '.hermes/brain/status/polymarket_btc_updown.json'
 STATE_FILE = Path.home() / '.hermes/brain/state/polymarket_btc_updown_state.json'
 GAMMA_URL = 'https://gamma-api.polymarket.com/markets?active=true&closed=false&limit=500&order=volumeNum&ascending=false'
 
-MAX_OPEN_POSITIONS = 2
 MAX_POSITION_USD = 40.00
 MIN_LIQUIDITY_USD = 10000
 YES_PRICE_CEILING = 0.10  # only trade extreme longshots (buy NO)
-FUND_SLEEVES = [
-    'fund_75_25_balanced.directional',
-    'fund_90_10_growth.latency_arb',
-]
+
+# Per-sleeve target deployment (USD). Slot count derives from
+# ceil(target / MAX_POSITION_USD). Same candidate pool feeds both sleeves;
+# each sleeve gets its own attribution via the `fund` tag.
+SLEEVE_TARGETS = {
+    'fund_75_25_balanced.directional': 200.00,
+    'fund_90_10_growth.latency_arb': 300.00,
+}
 
 log = logging.getLogger(WORKER_NAME)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
@@ -130,15 +136,34 @@ def current_yes_price(slug):
         return None
 
 
-def run_once():
-    portfolio = load_json(PORTFOLIO_FILE, {'positions': []})
-    positions = portfolio.get('positions', []) if isinstance(portfolio, dict) else portfolio
-    now_iso = datetime.now(timezone.utc).isoformat()
+def positions_for_sleeve(positions, sleeve_id, open_only=True):
+    out = []
+    for p in positions:
+        if not isinstance(p, dict):
+            continue
+        if p.get('worker') != WORKER_NAME:
+            continue
+        if p.get('sleeve') != sleeve_id:
+            continue
+        if open_only and p.get('resolved'):
+            continue
+        out.append(p)
+    return out
 
-    # existing open positions for this worker
-    open_pos = [p for p in positions if isinstance(p, dict) and p.get('worker') == WORKER_NAME and not p.get('resolved')]
 
-    # mark-to-market / resolve existing
+def position_id(slug, sleeve_id):
+    return f'poly_btc_no_{slug[:32]}_{sleeve_id}'
+
+
+def fill_sleeve(positions, cands, sleeve_id, target_usd, now_iso):
+    """Mark-to-market and resolve existing, then open new positions to hit target.
+
+    Returns (open_positions, opened_count, resolved_count).
+    """
+    fund_id = sleeve_id.split('.', 1)[0]
+    open_pos = positions_for_sleeve(positions, sleeve_id)
+
+    resolved_count = 0
     for pos in open_pos:
         slug = pos.get('market_slug')
         if not slug:
@@ -161,74 +186,119 @@ def run_once():
             pos['resolved'] = True
             pos['resolve_time'] = now_iso
             pos['exit_no_price'] = round(cur_no, 4)
-            pos['correct'] = cur_no > entry_no  # paper P&L positive => correct call
-            log.info('resolved %s  final_no=%.4f  pnl=$%.2f', pos.get('id'), cur_no, pos['pnl_usd'])
+            pos['correct'] = cur_no > entry_no
+            resolved_count += 1
+            log.info('resolved [%s] %s  final_no=%.4f  pnl=$%.2f',
+                     sleeve_id, pos.get('id'), cur_no, pos['pnl_usd'])
 
-    open_pos = [p for p in positions if isinstance(p, dict) and p.get('worker') == WORKER_NAME and not p.get('resolved')]
-    slots_remaining = max(0, MAX_OPEN_POSITIONS - len(open_pos))
-
-    cands = rank_candidates()
-    # filter out ones we already have open
+    open_pos = positions_for_sleeve(positions, sleeve_id)
     open_slugs = {p.get('market_slug') for p in open_pos}
-    new_cands = [c for c in cands if c['slug'] not in open_slugs]
+    deployed = sum(p.get('size_usd', p.get('principal_usd', 0)) for p in open_pos)
+    max_slots = math.ceil(target_usd / MAX_POSITION_USD)
 
     opened = 0
-    for c in new_cands[:slots_remaining]:
-        pos_id = f'poly_btc_no_{c["slug"][:40]}'
+    for c in cands:
+        if c['slug'] in open_slugs:
+            continue
+        if len(open_pos) >= max_slots:
+            break
+        if deployed >= target_usd:
+            break
+        size = min(MAX_POSITION_USD, target_usd - deployed)
+        if size < 1.0:
+            break
         pos = {
-            'id': pos_id,
+            'id': position_id(c['slug'], sleeve_id),
             'worker': WORKER_NAME,
+            'fund': fund_id,
+            'sleeve': sleeve_id,
             'market_slug': c['slug'],
             'question': c['question'],
             'symbol': 'BTC',
             'side': 'NO',
-            'entry_price': c['yes_price'],        # generic field
+            'entry_price': c['yes_price'],
             'entry_no_price': c['no_price'],
             'end_iso': c['end_iso'],
-            'principal_usd': MAX_POSITION_USD,
-            'size_usd': MAX_POSITION_USD,
+            'principal_usd': size,
+            'size_usd': size,
             'pnl_usd': 0.0,
             'resolved': False,
             'entry_time': now_iso,
             'liquidity_usd_at_entry': c['liquidity_usd'],
         }
         positions.append(pos)
+        open_pos.append(pos)
+        open_slugs.add(c['slug'])
+        deployed += size
         opened += 1
-        log.info('opened NO on %s  yes=%.4f  no=%.4f  size=$%.2f', c['slug'], c['yes_price'], c['no_price'], MAX_POSITION_USD)
+        log.info('opened NO [%s] %s yes=%.4f no=%.4f size=$%.2f',
+                 sleeve_id, c['slug'], c['yes_price'], c['no_price'], size)
 
-    # persist portfolio
+    return open_pos, opened, resolved_count
+
+
+def run_once():
+    portfolio = load_json(PORTFOLIO_FILE, {'positions': []})
+    positions = portfolio.get('positions', []) if isinstance(portfolio, dict) else portfolio
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    cands = rank_candidates()
+
+    per_sleeve_open = {}
+    total_opened = 0
+    total_resolved = 0
+    for sleeve_id, target in SLEEVE_TARGETS.items():
+        open_pos, opened, resolved = fill_sleeve(positions, cands, sleeve_id, target, now_iso)
+        per_sleeve_open[sleeve_id] = open_pos
+        total_opened += opened
+        total_resolved += resolved
+
     if isinstance(portfolio, dict):
         portfolio['positions'] = positions
         save_json_atomic(PORTFOLIO_FILE, portfolio)
     else:
         save_json_atomic(PORTFOLIO_FILE, positions)
 
-    # status
-    open_final = [p for p in positions if isinstance(p, dict) and p.get('worker') == WORKER_NAME and not p.get('resolved')]
-    closed_final = [p for p in positions if isinstance(p, dict) and p.get('worker') == WORKER_NAME and p.get('resolved')]
+    open_final = [p for ps in per_sleeve_open.values() for p in ps]
+    closed_final = [p for p in positions
+                    if isinstance(p, dict)
+                    and p.get('worker') == WORKER_NAME
+                    and p.get('resolved')]
     deployed = sum((p.get('size_usd') or 0) for p in open_final)
     unrealized = sum((p.get('pnl_usd') or 0) for p in open_final)
     realized = sum((p.get('pnl_usd') or 0) for p in closed_final)
+
+    state = load_json(STATE_FILE, {})
+    cycle = int(state.get('cycle_count', 0)) + 1
+
     status = {
         'worker_name': WORKER_NAME,
         'strategy_type': 'polymarket_binary_fade_longshot',
         'status': 'active' if open_final else 'scanning',
         'last_heartbeat': datetime.now().astimezone().isoformat(),
-        'cycle_count': (load_json(STATE_FILE, {}).get('cycle_count', 0) + 1),
+        'cycle_count': cycle,
         'position_summary': {
             'open_positions': len(open_final),
             'closed_positions': len(closed_final),
             'total_capital_deployed_usd': round(deployed, 2),
             'realized_pnl_usd': round(realized, 2),
             'unrealized_pnl_usd': round(unrealized, 2),
+            'by_sleeve': {
+                sid: {
+                    'open_positions': len(ps),
+                    'deployed_usd': round(sum((p.get('size_usd') or 0) for p in ps), 2),
+                }
+                for sid, ps in per_sleeve_open.items()
+            },
         },
         'performance': {
             'pnl_all_time': round(realized + unrealized, 2),
-            'trades_last_24h': opened,
+            'trades_last_24h': total_opened,
             'win_rate': (sum(1 for p in closed_final if p.get('correct')) / max(1, len(closed_final))) if closed_final else None,
         },
         'risk': {
-            'max_open_positions': MAX_OPEN_POSITIONS,
+            'position_sizing_method': 'per_sleeve_target',
+            'sleeve_targets_usd': SLEEVE_TARGETS,
             'max_position_usd': MAX_POSITION_USD,
             'yes_price_ceiling': YES_PRICE_CEILING,
             'min_liquidity_usd': MIN_LIQUIDITY_USD,
@@ -236,27 +306,25 @@ def run_once():
         'strategy_config': {
             'source': 'polymarket_gamma_public',
             'rule': 'buy NO on BTC binary markets with YES price < 0.10',
-            'fund_sleeves': FUND_SLEEVES,
+            'fund_sleeves': list(SLEEVE_TARGETS.keys()),
         },
         'errors_last_24h': 0,
         'health_check': 'green',
         'this_cycle': {
             'candidates_considered': len(cands),
-            'new_positions_opened': opened,
-            'open_positions_marked': len(open_pos),
+            'new_positions_opened': total_opened,
+            'positions_resolved': total_resolved,
         },
     }
     save_json_atomic(STATUS_FILE, status)
 
-    # bump cycle counter state
-    state = load_json(STATE_FILE, {})
-    state['cycle_count'] = status['cycle_count']
+    state['cycle_count'] = cycle
     state['last_run'] = now_iso
     save_json_atomic(STATE_FILE, state)
 
-    print(f'[{WORKER_NAME}] open={len(open_final)} deployed=${deployed:.2f} '
-          f'unrealized=${unrealized:.4f} realized=${realized:.4f} '
-          f'candidates={len(cands)} opened={opened}')
+    print(f'[{WORKER_NAME}] sleeves={len(per_sleeve_open)} open={len(open_final)} '
+          f'deployed=${deployed:.2f} unrealized=${unrealized:.4f} realized=${realized:.4f} '
+          f'candidates={len(cands)} opened={total_opened} resolved={total_resolved}')
 
 
 if __name__ == '__main__':
