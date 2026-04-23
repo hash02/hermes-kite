@@ -221,6 +221,73 @@ realized vol, vol cap, Kelly scale, drawdown halt flag, counterparty scalar,
 and final sized USD. Unit tests in `tests/test_risk_engine.py` cover each
 constraint independently.
 
+## NAV accounting (`funds/nav_accounting.py`)
+
+Proper fund accounting — unit pricing, management + performance fee accrual,
+high-water marks, hurdle rates, period statements. Each fund carries:
+
+- `units_outstanding` — starts at `capital_usd / $1.0000`
+- `hwm_per_unit` — performance fee only paid on NAV above this
+- `cumulative_mgmt_fees_paid_usd`, `cumulative_perf_fees_paid_usd`
+- per-fund fee config in `policy.json`:
+  ```
+  fund_60_40_income:  mgmt 1.0% / perf 10% / hurdle 0%
+  fund_75_25_balanced: mgmt 1.5% / perf 15% / hurdle 4% annual
+  fund_90_10_growth:  mgmt 2.0% / perf 20% / hurdle 8% annual
+  ```
+
+Fees accrue continuously (daily linear) and crystallize on cadence
+(monthly/quarterly/annual). Perf fee accrues only on NAV above the
+hurdle-lifted HWM, so the manager gets paid only for *real* outperformance.
+
+```bash
+python3 funds/nav_accounting.py --show                     # current NAV per fund
+python3 funds/nav_accounting.py --statement 2026-04        # monthly statement
+python3 funds/nav_accounting.py --statement 2026-Q2        # quarterly
+python3 funds/nav_accounting.py --statement 2026           # annual
+python3 funds/nav_accounting.py --crystallize-mgmt         # accrued -> paid
+python3 funds/nav_accounting.py --crystallize-perf         # paid + HWM reset
+python3 funds/nav_accounting.py --json                     # structured output
+```
+
+Statement output includes fund profile, NAV block (gross/net/HWM/annualized
+return), fee block (rates + accrued + paid), and per-sleeve detail (target,
+open, drift, PnL in absolute USD and % of fund capital). Persistent state in
+`data/nav_ledger.json` (inception date, units, HWM, cumulative paid).
+
+## Reconciliation (`scripts/reconcile.py`)
+
+Book-vs-chain drift check, suitable for cron. Validates:
+
+1. **Book integrity** — every settlement tx has a unique nonce; all
+   content_hashes and tx hashes are well-formed sha256.
+2. **Hashes↔txs** — every sleeve in `kite_settled.hashes` has a matching
+   tx entry.
+3. **Agent passport** — `data/agent_registry.json` payload_hash matches
+   `sha256(canonical_json(payload))`, using the same compact separators
+   as `onchain/register_agent.py`. Catches any post-hoc payload mutation.
+4. **On-chain nonce** — Kite testnet wallet nonce equals `max_book_nonce + 1`.
+   Higher → book missing txs. Lower → book has fictional txs.
+5. **Per-tx on-chain presence** — sampled 20 most-recent book txs must
+   resolve via `eth_getTransactionByHash` and be sent from the settlement
+   wallet.
+
+```bash
+python3 scripts/reconcile.py                               # full check
+python3 scripts/reconcile.py --skip-onchain                # book-only (CI / offline)
+python3 scripts/reconcile.py --json                        # structured report
+python3 scripts/reconcile.py --output-dir exports/rc_2026-04-23
+```
+
+Exit code: `0` clean, `1` on any error finding. Graceful degradation when
+RPC is unreachable or `web3` isn't installed — on-chain checks downgrade
+to warnings, book checks still run. Report categorizes findings as
+`ok` / `warn` / `error` per check.
+
+Covered by 17 unit tests with mocked web3 — duplicate-nonce detection,
+malformed hash, orphan sleeves, passport drift, RPC unreachable, on-chain
+nonce mismatches (too high / too low / aligned), wrong-wallet txs.
+
 ## Backtest harness (`funds/backtest.py`)
 
 Synthetic Monte Carlo over the current policy + fund set. Each simulated

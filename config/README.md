@@ -56,6 +56,21 @@ routing.
 2. Re-run any worker; it'll pick up the new values next cycle.
 3. For layout/sanity checks: `python3 -m json.tool config/policy.json`.
 
+## Fees (per-fund)
+
+Each fund has a `fees` block that drives `funds/nav_accounting.py`:
+
+- `management_fee_annual_pct` — linear daily accrual on gross equity.
+- `performance_fee_pct` — charged on NAV above the (hurdle-lifted) HWM.
+- `hurdle_rate_annual_pct` — annualized hurdle: perf fee only applies to
+  returns above HWM × (1 + hurdle × days_since_crystallization / 365).
+- `mgmt_fee_crystallization_cadence` — monthly / quarterly / annual.
+- `perf_fee_crystallization_cadence` — monthly / quarterly / annual.
+
+Current defaults escalate with risk: 60/40 = 1% / 10% / 0%; 75/25 = 1.5% /
+15% / 4%; 90/10 = 2% / 20% / 8%. Crystallization moves accrued → paid and
+(for perf) resets HWM to post-fee NAV.
+
 ## Risk engine
 
 The `risk` block drives `funds/risk_engine.py`. When `engine_enabled=true`,

@@ -14,6 +14,13 @@
       "target_annual_return_pct": 7.4,
       "max_drawdown_pct": 5.0,
       "payout_cadence": "monthly",
+      "fees": {
+        "management_fee_annual_pct": 1.0,
+        "performance_fee_pct": 10.0,
+        "hurdle_rate_annual_pct": 0.0,
+        "mgmt_fee_crystallization_cadence": "monthly",
+        "perf_fee_crystallization_cadence": "quarterly"
+      },
       "sleeves": {
         "stablecoin_yield": {
           "target_pct": 40,
@@ -46,6 +53,13 @@
       "target_annual_return_pct": 11.1,
       "max_drawdown_pct": 10.0,
       "payout_cadence": "quarterly",
+      "fees": {
+        "management_fee_annual_pct": 1.5,
+        "performance_fee_pct": 15.0,
+        "hurdle_rate_annual_pct": 4.0,
+        "mgmt_fee_crystallization_cadence": "monthly",
+        "perf_fee_crystallization_cadence": "quarterly"
+      },
       "sleeves": {
         "stablecoin_yield": {
           "target_pct": 25,
@@ -91,6 +105,13 @@
       "target_annual_return_pct": 34.0,
       "max_drawdown_pct": 25.0,
       "payout_cadence": "annual",
+      "fees": {
+        "management_fee_annual_pct": 2.0,
+        "performance_fee_pct": 20.0,
+        "hurdle_rate_annual_pct": 8.0,
+        "mgmt_fee_crystallization_cadence": "monthly",
+        "perf_fee_crystallization_cadence": "annual"
+      },
       "sleeves": {
         "stablecoin_floor": {
           "target_pct": 10,

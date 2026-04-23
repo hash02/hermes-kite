@@ -1,0 +1,43 @@
+{
+  "_notes": [
+    "NAV ledger — persistent state for fund accounting. Tracks units",
+    "outstanding, high-water marks, fee crystallizations. funds/nav_accounting.py",
+    "reads + updates this file.",
+    "Inception: 2026-03-04. Each fund started with capital_usd / $1.0000 units."
+  ],
+  "funds": {
+    "fund_60_40_income": {
+      "inception_date": "2026-03-04T00:00:00Z",
+      "initial_capital_usd": 1000.0,
+      "initial_nav_per_unit": 1.0000,
+      "units_outstanding": 1000.0,
+      "hwm_per_unit": 1.0000,
+      "last_mgmt_crystallization_date": "2026-03-04T00:00:00Z",
+      "cumulative_mgmt_fees_paid_usd": 0.0,
+      "last_perf_crystallization_date": "2026-03-04T00:00:00Z",
+      "cumulative_perf_fees_paid_usd": 0.0
+    },
+    "fund_75_25_balanced": {
+      "inception_date": "2026-03-04T00:00:00Z",
+      "initial_capital_usd": 1000.0,
+      "initial_nav_per_unit": 1.0000,
+      "units_outstanding": 1000.0,
+      "hwm_per_unit": 1.0000,
+      "last_mgmt_crystallization_date": "2026-03-04T00:00:00Z",
+      "cumulative_mgmt_fees_paid_usd": 0.0,
+      "last_perf_crystallization_date": "2026-03-04T00:00:00Z",
+      "cumulative_perf_fees_paid_usd": 0.0
+    },
+    "fund_90_10_growth": {
+      "inception_date": "2026-03-04T00:00:00Z",
+      "initial_capital_usd": 1000.0,
+      "initial_nav_per_unit": 1.0000,
+      "units_outstanding": 1000.0,
+      "hwm_per_unit": 1.0000,
+      "last_mgmt_crystallization_date": "2026-03-04T00:00:00Z",
+      "cumulative_mgmt_fees_paid_usd": 0.0,
+      "last_perf_crystallization_date": "2026-03-04T00:00:00Z",
+      "cumulative_perf_fees_paid_usd": 0.0
+    }
+  }
+}
