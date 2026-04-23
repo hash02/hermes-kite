@@ -31,12 +31,13 @@ All paper. Real market data. One on-chain executor sends settlement to Kite test
 | funds | 3 (60/40 income, 75/25 balanced, 90/10 growth) |
 | sleeves total | 16 |
 | sleeves funded | 16 |
-| total positions opened | 310 |
+| configured workers shipping | 17 / 17 |
+| total positions opened | 441 |
 | total target capital | $3,000 |
-| total open exposure | $2,631.98 |
-| total cumulative stake | $7,919.76 |
-| cumulative PnL (paper) | $+7.36 |
-| sleeves at <1% drift | 10 of 16 |
+| total open exposure | $2,641.82 |
+| total cumulative stake | $11,371.00 |
+| cumulative PnL (paper) | $+18.42 |
+| sleeves at <5% drift | 11 of 16 |
 | on-chain settlement txs | 106 (16 sleeve hashes refreshed; pending next :32 cron) |
 | live signals dashboard | https://bionicbanker.tech/signals/ |
 | live portfolio dashboard | https://bionicbanker.tech/portfolio/ |
@@ -73,18 +74,27 @@ No daemons. No long-lived processes. Every worker is a cron job that runs once, 
 
 ## Scanners shipping in this repo
 
+All 17 configured workers now ship in this repo (`funds/`). Shared engines live in `funds/grid_base.py` (spot grid logic) and `funds/yield_base.py` (fixed-yield accrual); each worker is a thin config on one of these bases or a standalone scanner.
+
 | Worker | Feed | Sleeve(s) |
 |---|---|---|
-| `aave_usdc_worker.py` | DeFiLlama Aave V3 Ethereum USDC supply APY | stablecoin_yield / stablecoin_floor (per-sleeve sizing) |
+| `aave_usdc_worker.py` | DeFiLlama Aave V3 Ethereum USDC supply APY | stablecoin_yield / stablecoin_floor |
 | `morpho_usdc_worker.py` | DeFiLlama Morpho Blue USDC vault APY | stablecoin_yield (60/40) |
 | `euler_pyusd_worker.py` | DeFiLlama Euler V2 PYUSD vault APY | stablecoin_yield (60/40) |
-| `sgho_worker.py` | DeFiLlama sGHO (Aave Savings GHO) APY | stablecoin_yield / stablecoin_floor (75/25 + 90/10) |
-| `delta_neutral_worker.py` | Binance perp funding + spot | delta_neutral (per-sleeve sizing) |
-| `polymarket_btc_updown_worker.py` | Polymarket Gamma API BTC longshots | directional / latency_arb (per-sleeve sizing) |
-| `grid_eth_usdc_worker.py` | Binance ETH/USDC spot + 24h klines pivot | structural_grid / aggressive_grid (per-sleeve sizing) |
-| `xstocks_grid_worker.py` | xStocks tokenized equity price | tokenized_stocks |
-| `xstocks_directional_worker.py` | xStocks + Yahoo Finance momentum | xstocks_directional |
-| `tv_momentum_worker.py` | Binance daily klines 7d momentum | directional_momentum |
+| `sgho_worker.py` | DeFiLlama sGHO (Aave Savings GHO) APY | stablecoin_yield / stablecoin_floor |
+| `superstate_uscc_worker.py` | Superstate public NAV API (short-duration Treasuries) | stablecoin_yield (75/25) |
+| `delta_neutral_worker.py` | Binance perp funding + spot | delta_neutral (per-sleeve) |
+| `polymarket_btc_updown_worker.py` | Polymarket Gamma API BTC longshots | directional / latency_arb |
+| `pyth_momentum_worker.py` | Pyth Hermes price feed + EMA cross | directional (75/25) |
+| `grid_eth_usdc_worker.py` | Binance ETH/USDC spot + 24h klines pivot | structural / aggressive grids |
+| `grid_btc_usdc_worker.py` | Binance BTC/USDC spot + 24h klines pivot | structural (75/25) / aggressive (90/10) |
+| `grid_sol_worker.py` | Binance SOL/USDC spot + 24h klines pivot | aggressive_grid (90/10) |
+| `grid_stables_worker.py` | Binance USDC/USDT spot + 24h klines pivot | structural_grid (60/40) |
+| `xstocks_grid_worker.py` | Stooq xStocks close | tokenized_stocks (75/25) |
+| `xstocks_directional_worker.py` | Yahoo Finance xStocks SMA+momentum | xstocks_directional (90/10) |
+| `tv_momentum_worker.py` | Binance daily klines 7d momentum | directional_momentum (90/10) |
+| `crypto_memecoins_worker.py` | CoinGecko meme-token category 7d change | memecoin_sniper (90/10) |
+| `wow_sniper_base_worker.py` | DexScreener Base chain new-token scanner | memecoin_sniper (90/10) |
 
 ## Kite integration
 

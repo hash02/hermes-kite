@@ -43,20 +43,21 @@
     "fund_60_40_income.structural_grid": {
       "target_pct": 25,
       "target_usd": 250.0,
-      "open_exposure_usd": 200.0,
-      "drift_pct": -20.0,
+      "open_exposure_usd": 175.0,
+      "drift_pct": -30.0,
       "workers_configured": [
         "grid_eth_usdc",
         "grid_stables"
       ],
       "workers_shipping": [
-        "grid_eth_usdc"
+        "grid_eth_usdc",
+        "grid_stables"
       ],
-      "positions_total": 60,
-      "resolved": 50,
-      "win_rate_pct": 80.0,
-      "pnl_usd": 12.5,
-      "staked_usd": 1200.0,
+      "positions_total": 90,
+      "resolved": 78,
+      "win_rate_pct": 82.0,
+      "pnl_usd": 9.4,
+      "staked_usd": 2000.0,
       "funded": true
     },
     "fund_60_40_income.cash": {
@@ -75,8 +76,8 @@
     "fund_75_25_balanced.stablecoin_yield": {
       "target_pct": 25,
       "target_usd": 250.0,
-      "open_exposure_usd": 251.49,
-      "drift_pct": 0.6,
+      "open_exposure_usd": 252.24,
+      "drift_pct": 0.9,
       "workers_configured": [
         "aave_usdc",
         "sgho",
@@ -84,12 +85,13 @@
       ],
       "workers_shipping": [
         "aave_usdc",
-        "sgho"
+        "sgho",
+        "superstate_uscc"
       ],
-      "positions_total": 2,
+      "positions_total": 3,
       "resolved": 0,
       "win_rate_pct": 0.0,
-      "pnl_usd": 1.49,
+      "pnl_usd": 2.24,
       "staked_usd": 250.0,
       "funded": true
     },
@@ -114,20 +116,21 @@
     "fund_75_25_balanced.structural_grid": {
       "target_pct": 25,
       "target_usd": 250.0,
-      "open_exposure_usd": 200.0,
-      "drift_pct": -20.0,
+      "open_exposure_usd": 175.0,
+      "drift_pct": -30.0,
       "workers_configured": [
         "grid_eth_usdc",
         "grid_btc_usdc"
       ],
       "workers_shipping": [
-        "grid_eth_usdc"
+        "grid_eth_usdc",
+        "grid_btc_usdc"
       ],
-      "positions_total": 60,
-      "resolved": 50,
-      "win_rate_pct": 80.0,
-      "pnl_usd": 12.5,
-      "staked_usd": 1200.0,
+      "positions_total": 85,
+      "resolved": 73,
+      "win_rate_pct": 82.0,
+      "pnl_usd": 8.9,
+      "staked_usd": 1900.0,
       "funded": true
     },
     "fund_75_25_balanced.directional": {
@@ -140,13 +143,14 @@
         "polymarket_btc_updown"
       ],
       "workers_shipping": [
+        "pyth_momentum",
         "polymarket_btc_updown"
       ],
-      "positions_total": 10,
-      "resolved": 5,
-      "win_rate_pct": 80.0,
-      "pnl_usd": -22.4,
-      "staked_usd": 400.0,
+      "positions_total": 15,
+      "resolved": 8,
+      "win_rate_pct": 70.0,
+      "pnl_usd": -10.0,
+      "staked_usd": 480.0,
       "funded": true
     },
     "fund_75_25_balanced.tokenized_stocks": {
@@ -221,21 +225,23 @@
     "fund_90_10_growth.aggressive_grid": {
       "target_pct": 20,
       "target_usd": 200.0,
-      "open_exposure_usd": 160.0,
-      "drift_pct": -20.0,
+      "open_exposure_usd": 140.0,
+      "drift_pct": -30.0,
       "workers_configured": [
         "grid_eth_usdc",
         "grid_btc_usdc",
         "grid_sol"
       ],
       "workers_shipping": [
-        "grid_eth_usdc"
+        "grid_eth_usdc",
+        "grid_btc_usdc",
+        "grid_sol"
       ],
-      "positions_total": 50,
-      "resolved": 42,
-      "win_rate_pct": 80.0,
-      "pnl_usd": 8.0,
-      "staked_usd": 1000.0,
+      "positions_total": 110,
+      "resolved": 96,
+      "win_rate_pct": 82.0,
+      "pnl_usd": 11.2,
+      "staked_usd": 2400.0,
       "funded": true
     },
     "fund_90_10_growth.directional_momentum": {
@@ -259,18 +265,21 @@
     "fund_90_10_growth.memecoin_sniper": {
       "target_pct": 10,
       "target_usd": 100.0,
-      "open_exposure_usd": 15.91,
-      "drift_pct": -84.1,
+      "open_exposure_usd": 95.0,
+      "drift_pct": -5.0,
       "workers_configured": [
         "crypto_memecoins",
         "wow_sniper_base"
       ],
-      "workers_shipping": [],
-      "positions_total": 50,
-      "resolved": 45,
-      "win_rate_pct": 53.3,
-      "pnl_usd": 0.09,
-      "staked_usd": 128.76,
+      "workers_shipping": [
+        "crypto_memecoins",
+        "wow_sniper_base"
+      ],
+      "positions_total": 60,
+      "resolved": 50,
+      "win_rate_pct": 55.0,
+      "pnl_usd": 1.5,
+      "staked_usd": 600.0,
       "funded": true
     },
     "fund_90_10_growth.xstocks_directional": {
@@ -292,6 +301,6 @@
       "funded": true
     }
   },
-  "as_of": "2026-04-23T14:32:00Z",
+  "as_of": "2026-04-23T15:32:00Z",
   "source": "wukong:~/.hermes/brain/funds/"
 }

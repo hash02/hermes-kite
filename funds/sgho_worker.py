@@ -39,10 +39,10 @@ STATUS_FILE = HERMES / "status" / "sgho.json"
 WORKER_NAME = "sgho"
 SYMBOL = "AAVE_SGHO"
 
-# 75/25 stablecoin_yield target $250 (sharing with aave + superstate, third
-# pending) and 90/10 stablecoin_floor target $100 (sharing with aave).
+# 75/25 stablecoin_yield target $250, 3-way split with aave + superstate (all shipping).
+# 90/10 stablecoin_floor target $100, 2-way split with aave.
 SLEEVE_TARGETS = {
-    "fund_75_25_balanced.stablecoin_yield": 125.00,
+    "fund_75_25_balanced.stablecoin_yield": 83.33,
     "fund_90_10_growth.stablecoin_floor": 50.00,
 }
 
