@@ -65,11 +65,33 @@ def sleeve_targets_for(worker_name: str) -> dict:
     Return {"<fund_id>.<sleeve_id>": principal_usd} for every sleeve the
     given worker is wired into across all funds.
 
-    Value priority (first non-null wins):
+    When `risk.engine_enabled` is true in policy.json, the raw static values
+    are routed through funds.risk_engine.apply_engine() which may override
+    them with vol-targeted / Kelly-scaled / drawdown-halted sizes. When
+    disabled (default), the static values pass through unchanged.
+
+    Value priority per-sleeve (first non-null wins):
       principal_usd > target_deployment_usd > principal_usd_per_symbol
       (only one is expected; the fallback order lets a single config key
       cover any worker style.)
     """
+    static = _static_sleeve_targets_for(worker_name)
+    if not risk_engine_enabled():
+        return static
+    # Lazy import — avoids a circular dependency at module load.
+    try:
+        from risk_engine import apply_engine   # type: ignore
+    except Exception:
+        return static
+    try:
+        return apply_engine(worker_name, static)
+    except Exception:
+        return static
+
+
+def _static_sleeve_targets_for(worker_name: str) -> dict:
+    """Raw lookup in policy.json with no engine dispatch. Used by risk_engine
+    and by sleeve_targets_for when the engine is disabled."""
     out = {}
     policy = _load_policy()
     for fund_id, fund in policy.get("funds", {}).items():

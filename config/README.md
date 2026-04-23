@@ -56,10 +56,23 @@ routing.
 2. Re-run any worker; it'll pick up the new values next cycle.
 3. For layout/sanity checks: `python3 -m json.tool config/policy.json`.
 
-## Future: risk engine
+## Risk engine
 
-When `risk.engine_enabled=true`, the (not-yet-shipped) `funds/risk_engine.py`
-module will derive `principal_usd` dynamically from target portfolio vol +
-realized per-sleeve vol + Kelly fraction, instead of the static values in
-this file. The static values then serve as "boot config" (used at cold start
-before enough return history exists to estimate vol).
+The `risk` block drives `funds/risk_engine.py`. When `engine_enabled=true`,
+every `sleeve_targets_for(worker)` call routes through `risk_engine.apply_engine()`
+which returns vol-targeted / Kelly-scaled / drawdown-halted sizes instead of
+the raw JSON values. When disabled, static values pass through. Knobs:
+
+- `kelly_fraction` — final scalar on every size (default 0.25 = quarter-Kelly).
+- `target_portfolio_vol_pct` — portfolio-level annualized vol target. Each
+  sleeve gets `target / sqrt(n_sleeves_in_fund)` as its own vol budget.
+- `max_concentration_per_counterparty_pct` — pro-rata scales down sizes on
+  any counterparty exceeding this % of fund capital.
+- `max_drawdown_halt_per_fund_pct` — if fund drawdown ≤ -this, every sleeve
+  in the fund sizes to zero. Set `null` to disable.
+
+Preview the engine's effect without flipping the flag:
+
+```bash
+python3 funds/risk_engine.py --show --enable-preview
+```

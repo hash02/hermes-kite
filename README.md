@@ -183,7 +183,43 @@ _cfg = worker_cfg("delta_neutral_funding")
 MIN_ANNUALIZED_RATE = _cfg.get("min_annualized_rate_pct", 8.0)
 ```
 
-Reserved `risk` block in the same file holds math-engine inputs (Kelly fraction, target portfolio vol, drawdown halt). `engine_enabled: false` today — when flipped on, the planned `funds/risk_engine.py` will derive sizing dynamically from realized vol + correlation instead of the static `principal_usd` values; the static values then serve as boot config.
+## Risk engine (`funds/risk_engine.py`)
+
+The `risk` block in `policy.json` drives a math engine that overrides the
+static sleeve principals with dynamic sizing. Off by default (`engine_enabled:
+false`), so static policy values pass through unchanged. When flipped on, the
+engine applies four stacked constraints per sleeve:
+
+1. **Realized-vol cap** — per-sleeve vol estimated from resolved position history
+   (stddev of pnl-over-principal, annualized). With fewer than 5 resolved trades,
+   falls back to a strategy-category bootstrap (yield 1%, delta-neutral 3%, grid
+   8%, directional 25%, binary 40%, memecoin 80%, sniper 120%). Sleeve size is
+   capped such that its contribution to fund vol ≤ `target_portfolio_vol_pct /
+   sqrt(n_sleeves_in_fund)`.
+2. **Fractional Kelly scale** — applies `kelly_fraction` (default 0.25, i.e.
+   quarter-Kelly) as the final multiplier. Classic discipline: full Kelly is
+   too aggressive for live capital, quarter-Kelly is the standard compromise.
+3. **Drawdown halt** — if the fund's cumulative PnL is below
+   `-max_drawdown_halt_per_fund_pct`, every sleeve in that fund sizes to zero.
+   `null` disables the halt.
+4. **Counterparty concentration cap** — if a counterparty (e.g. `aave_v3`,
+   `binance_spot`, `polymarket`) exceeds `max_concentration_per_counterparty_pct`
+   of fund capital under the static plan, every position on that counterparty
+   is pro-rata-scaled down to the cap.
+
+Toggle and inspect:
+
+```bash
+python3 funds/risk_engine.py --show                    # current sizing (whichever mode)
+python3 funds/risk_engine.py --show --enable-preview   # what sizing would be if engine on
+python3 funds/risk_engine.py --enable                  # flip engine_enabled=true
+python3 funds/risk_engine.py --disable                 # flip engine_enabled=false
+```
+
+The `--show` table prints the full decision chain per sleeve: static target,
+realized vol, vol cap, Kelly scale, drawdown halt flag, counterparty scalar,
+and final sized USD. Unit tests in `tests/test_risk_engine.py` cover each
+constraint independently.
 
 ## CSV export on demand
 
