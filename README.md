@@ -30,13 +30,15 @@ All paper. Real market data. One on-chain executor sends settlement to Kite test
 |---|---:|
 | funds | 3 (60/40 income, 75/25 balanced, 90/10 growth) |
 | sleeves total | 16 |
-| sleeves funded | 9 |
-| total positions opened | 152 |
+| sleeves funded | 16 |
+| configured workers shipping | 17 / 17 |
+| total positions opened | 441 |
 | total target capital | $3,000 |
-| total open exposure | $292.79 |
-| total cumulative stake | $533.78 |
-| cumulative PnL (paper) | $+0.08 |
-| on-chain settlement txs | 106 |
+| total open exposure | $2,641.82 |
+| total cumulative stake | $11,371.00 |
+| cumulative PnL (paper) | $+18.42 |
+| sleeves at <5% drift | 11 of 16 |
+| on-chain settlement txs | 106 (16 sleeve hashes refreshed; pending next :32 cron) |
 | live signals dashboard | https://bionicbanker.tech/signals/ |
 | live portfolio dashboard | https://bionicbanker.tech/portfolio/ |
 
@@ -72,14 +74,27 @@ No daemons. No long-lived processes. Every worker is a cron job that runs once, 
 
 ## Scanners shipping in this repo
 
-| Worker | Feed | Sleeve |
+All 17 configured workers now ship in this repo (`funds/`). Shared engines live in `funds/grid_base.py` (spot grid logic) and `funds/yield_base.py` (fixed-yield accrual); each worker is a thin config on one of these bases or a standalone scanner.
+
+| Worker | Feed | Sleeve(s) |
 |---|---|---|
-| `aave_usdc_worker.py` | DeFiLlama Aave V3 Ethereum USDC supply APY | stablecoin_yield |
-| `delta_neutral_worker.py` | Binance perp funding + spot | delta_neutral |
-| `polymarket_btc_updown_worker.py` | Polymarket Gamma API BTC daily up/down | event_edge |
-| `xstocks_grid_worker.py` | xStocks tokenized equity price | equity_grid |
-| `xstocks_directional_worker.py` | xStocks + volume | equity_directional |
-| `tv_momentum_worker.py` | TradingView RSS momentum scan | momentum |
+| `aave_usdc_worker.py` | DeFiLlama Aave V3 Ethereum USDC supply APY | stablecoin_yield / stablecoin_floor |
+| `morpho_usdc_worker.py` | DeFiLlama Morpho Blue USDC vault APY | stablecoin_yield (60/40) |
+| `euler_pyusd_worker.py` | DeFiLlama Euler V2 PYUSD vault APY | stablecoin_yield (60/40) |
+| `sgho_worker.py` | DeFiLlama sGHO (Aave Savings GHO) APY | stablecoin_yield / stablecoin_floor |
+| `superstate_uscc_worker.py` | Superstate public NAV API (short-duration Treasuries) | stablecoin_yield (75/25) |
+| `delta_neutral_worker.py` | Binance perp funding + spot | delta_neutral (per-sleeve) |
+| `polymarket_btc_updown_worker.py` | Polymarket Gamma API BTC longshots | directional / latency_arb |
+| `pyth_momentum_worker.py` | Pyth Hermes price feed + EMA cross | directional (75/25) |
+| `grid_eth_usdc_worker.py` | Binance ETH/USDC spot + 24h klines pivot | structural / aggressive grids |
+| `grid_btc_usdc_worker.py` | Binance BTC/USDC spot + 24h klines pivot | structural (75/25) / aggressive (90/10) |
+| `grid_sol_worker.py` | Binance SOL/USDC spot + 24h klines pivot | aggressive_grid (90/10) |
+| `grid_stables_worker.py` | Binance USDC/USDT spot + 24h klines pivot | structural_grid (60/40) |
+| `xstocks_grid_worker.py` | Stooq xStocks close | tokenized_stocks (75/25) |
+| `xstocks_directional_worker.py` | Yahoo Finance xStocks SMA+momentum | xstocks_directional (90/10) |
+| `tv_momentum_worker.py` | Binance daily klines 7d momentum | directional_momentum (90/10) |
+| `crypto_memecoins_worker.py` | CoinGecko meme-token category 7d change | memecoin_sniper (90/10) |
+| `wow_sniper_base_worker.py` | DexScreener Base chain new-token scanner | memecoin_sniper (90/10) |
 
 ## Kite integration
 
@@ -119,7 +134,7 @@ Self-attested for the hackathon scope. Upgrades to the full Kite Passport CLI + 
 
 Settlement marker txs on Kite testnet (chain 2368), wallet `0xA29fF03ABfd219e3c76D1C18653297B8201B7748`. Each tx data decodes to `hermes-kite:AGENT_ID:SLEEVE:SHA256`.
 
-**Live count as of 2026-04-22T02:37:37Z:** 106 on-chain settlements, nonces 9 → 114, across all 16 sleeves. Hourly cron at `:32` keeps writing markers. Re-runs without new sleeve flips print `nothing to settle` — idempotent by design.
+**Live count as of 2026-04-23T12:32:00Z:** 106 on-chain settlements, nonces 9 → 114. Coverage just expanded from 9 to 16 of 16 sleeves; the 8 newly-filled sleeve hashes are queued for the next `:32` cron tick. Hourly cron keeps writing markers. Re-runs without new sleeve flips print `nothing to settle` — idempotent by design.
 
 | sleeve | settlements | latest on-chain marker |
 |---|---:|---|
@@ -155,6 +170,183 @@ export KITE_PRIVATE_KEY=0x...   # funded via https://faucet.gokite.ai/
 python3 funds/aave_usdc_worker.py
 python3 onchain/kite_executor.py  # settle latest portfolio delta on Kite
 ```
+
+## Config (`config/policy.json`)
+
+Every knob that used to be hardcoded — fund allocations, per-sleeve sizing, worker thresholds (EMA windows, entry gates, stop-losses, grid bands) — lives in one file: [`config/policy.json`](config/policy.json). Workers load it via [`funds/policy.py`](funds/policy.py) at cycle start; if the file is missing they fall back to built-in defaults (so legacy environments keep running). Edit the JSON, re-run the worker, new values take effect next cycle — no code changes. Schema in [`config/README.md`](config/README.md).
+
+```python
+# In every worker:
+from policy import sleeve_targets_for, worker_cfg
+SLEEVE_TARGETS = sleeve_targets_for("aave_usdc") or _FALLBACK_TARGETS
+_cfg = worker_cfg("delta_neutral_funding")
+MIN_ANNUALIZED_RATE = _cfg.get("min_annualized_rate_pct", 8.0)
+```
+
+## Risk engine (`funds/risk_engine.py`)
+
+The `risk` block in `policy.json` drives a math engine that overrides the
+static sleeve principals with dynamic sizing. Off by default (`engine_enabled:
+false`), so static policy values pass through unchanged. When flipped on, the
+engine applies four stacked constraints per sleeve:
+
+1. **Realized-vol cap** — per-sleeve vol estimated from resolved position history
+   (stddev of pnl-over-principal, annualized). With fewer than 5 resolved trades,
+   falls back to a strategy-category bootstrap (yield 1%, delta-neutral 3%, grid
+   8%, directional 25%, binary 40%, memecoin 80%, sniper 120%). Sleeve size is
+   capped such that its contribution to fund vol ≤ `target_portfolio_vol_pct /
+   sqrt(n_sleeves_in_fund)`.
+2. **Fractional Kelly scale** — applies `kelly_fraction` (default 0.25, i.e.
+   quarter-Kelly) as the final multiplier. Classic discipline: full Kelly is
+   too aggressive for live capital, quarter-Kelly is the standard compromise.
+3. **Drawdown halt** — if the fund's cumulative PnL is below
+   `-max_drawdown_halt_per_fund_pct`, every sleeve in that fund sizes to zero.
+   `null` disables the halt.
+4. **Counterparty concentration cap** — if a counterparty (e.g. `aave_v3`,
+   `binance_spot`, `polymarket`) exceeds `max_concentration_per_counterparty_pct`
+   of fund capital under the static plan, every position on that counterparty
+   is pro-rata-scaled down to the cap.
+
+Toggle and inspect:
+
+```bash
+python3 funds/risk_engine.py --show                    # current sizing (whichever mode)
+python3 funds/risk_engine.py --show --enable-preview   # what sizing would be if engine on
+python3 funds/risk_engine.py --enable                  # flip engine_enabled=true
+python3 funds/risk_engine.py --disable                 # flip engine_enabled=false
+```
+
+The `--show` table prints the full decision chain per sleeve: static target,
+realized vol, vol cap, Kelly scale, drawdown halt flag, counterparty scalar,
+and final sized USD. Unit tests in `tests/test_risk_engine.py` cover each
+constraint independently.
+
+## NAV accounting (`funds/nav_accounting.py`)
+
+Proper fund accounting — unit pricing, management + performance fee accrual,
+high-water marks, hurdle rates, period statements. Each fund carries:
+
+- `units_outstanding` — starts at `capital_usd / $1.0000`
+- `hwm_per_unit` — performance fee only paid on NAV above this
+- `cumulative_mgmt_fees_paid_usd`, `cumulative_perf_fees_paid_usd`
+- per-fund fee config in `policy.json`:
+  ```
+  fund_60_40_income:  mgmt 1.0% / perf 10% / hurdle 0%
+  fund_75_25_balanced: mgmt 1.5% / perf 15% / hurdle 4% annual
+  fund_90_10_growth:  mgmt 2.0% / perf 20% / hurdle 8% annual
+  ```
+
+Fees accrue continuously (daily linear) and crystallize on cadence
+(monthly/quarterly/annual). Perf fee accrues only on NAV above the
+hurdle-lifted HWM, so the manager gets paid only for *real* outperformance.
+
+```bash
+python3 funds/nav_accounting.py --show                     # current NAV per fund
+python3 funds/nav_accounting.py --statement 2026-04        # monthly statement
+python3 funds/nav_accounting.py --statement 2026-Q2        # quarterly
+python3 funds/nav_accounting.py --statement 2026           # annual
+python3 funds/nav_accounting.py --crystallize-mgmt         # accrued -> paid
+python3 funds/nav_accounting.py --crystallize-perf         # paid + HWM reset
+python3 funds/nav_accounting.py --json                     # structured output
+```
+
+Statement output includes fund profile, NAV block (gross/net/HWM/annualized
+return), fee block (rates + accrued + paid), and per-sleeve detail (target,
+open, drift, PnL in absolute USD and % of fund capital). Persistent state in
+`data/nav_ledger.json` (inception date, units, HWM, cumulative paid).
+
+## Reconciliation (`scripts/reconcile.py`)
+
+Book-vs-chain drift check, suitable for cron. Validates:
+
+1. **Book integrity** — every settlement tx has a unique nonce; all
+   content_hashes and tx hashes are well-formed sha256.
+2. **Hashes↔txs** — every sleeve in `kite_settled.hashes` has a matching
+   tx entry.
+3. **Agent passport** — `data/agent_registry.json` payload_hash matches
+   `sha256(canonical_json(payload))`, using the same compact separators
+   as `onchain/register_agent.py`. Catches any post-hoc payload mutation.
+4. **On-chain nonce** — Kite testnet wallet nonce equals `max_book_nonce + 1`.
+   Higher → book missing txs. Lower → book has fictional txs.
+5. **Per-tx on-chain presence** — sampled 20 most-recent book txs must
+   resolve via `eth_getTransactionByHash` and be sent from the settlement
+   wallet.
+
+```bash
+python3 scripts/reconcile.py                               # full check
+python3 scripts/reconcile.py --skip-onchain                # book-only (CI / offline)
+python3 scripts/reconcile.py --json                        # structured report
+python3 scripts/reconcile.py --output-dir exports/rc_2026-04-23
+```
+
+Exit code: `0` clean, `1` on any error finding. Graceful degradation when
+RPC is unreachable or `web3` isn't installed — on-chain checks downgrade
+to warnings, book checks still run. Report categorizes findings as
+`ok` / `warn` / `error` per check.
+
+Covered by 17 unit tests with mocked web3 — duplicate-nonce detection,
+malformed hash, orphan sleeves, passport drift, RPC unreachable, on-chain
+nonce mismatches (too high / too low / aligned), wrong-wallet txs.
+
+## Backtest harness (`funds/backtest.py`)
+
+Synthetic Monte Carlo over the current policy + fund set. Each simulated
+day, the risk engine (if enabled) sizes every sleeve from running state,
+then a daily return is drawn per sleeve from `Normal(mu/252, sigma/√252)`
+with `mu` / `sigma` taken from a per-strategy table (yield mu=4% vol=1%,
+grid mu=12% vol=8%, memecoin mu=30% vol=80%, sniper mu=50% vol=120%, etc.).
+Sleeve PnL = size × daily_return. Runs for N paths, reports per-fund
+distributions.
+
+```bash
+python3 funds/backtest.py                         # 252 days × 100 sims
+python3 funds/backtest.py --sims 500 --days 365
+python3 funds/backtest.py --compare               # engine ON vs OFF delta
+python3 funds/backtest.py --kelly-sweep           # sweep kelly_fraction 0.1..1.0
+python3 funds/backtest.py --fund fund_60_40_income
+python3 funds/backtest.py --output-dir exports/bt_2026-04-23  # JSON + equity CSVs
+```
+
+Reports per fund: `Sharpe`, `Sortino`, `MaxDD%`, `CAGR%`, `AnnVol%`,
+`WinRate%` at p5 / p50 / p95. Equity curves for the first 5 sims optionally
+drop to CSV for plotting.
+
+Sample output (100 sims × 252 days, engine off):
+
+```
+fund_60_40_income    p50 Sharpe 4.45   MaxDD -0.5%   CAGR 5.6%   AnnVol 1.2%
+fund_75_25_balanced  p50 Sharpe 1.54   MaxDD -3.6%   CAGR 7.6%   AnnVol 4.8%
+fund_90_10_growth    p50 Sharpe 0.94   MaxDD -10.2%  CAGR 12.1%  AnnVol 13.5%
+```
+
+`--kelly-sweep` confirms the textbook pattern — Kelly scales MaxDD, CAGR,
+and vol linearly while Sharpe is ~invariant; lower Kelly buys drawdown
+protection, not better risk-adjusted return. `--compare` shows engine ON
+trims CAGR by ~10pp on the growth fund but cuts MaxDD by ~9pp — the
+canonical Kelly tradeoff.
+
+Real-data (historical price replay) backtest is a separate follow-on PR;
+this synthetic harness validates the fund *structure* and engine
+*behavior*, not the vol parameters themselves.
+
+## CSV export on demand
+
+Any time you want reporting-grade CSVs of the current state, run:
+
+```bash
+python3 scripts/export_csv.py                                  # everything to ./exports/
+python3 scripts/export_csv.py --output-dir exports/2026-04-23
+python3 scripts/export_csv.py --fund fund_75_25_balanced       # filter to one fund
+python3 scripts/export_csv.py --since 2026-04-20T00:00:00Z     # only positions from this date
+```
+
+Emits:
+- `funds.csv` — per-fund aggregates (capital, open, staked, PnL, coverage)
+- `sleeves.csv` — per-sleeve detail (target, drift, positions, win-rate, PnL, shipping workers)
+- `positions.csv` — every position, open + resolved
+- `trades.csv` — resolved positions only (trade log)
+- `settlements.csv` — on-chain markers (nonce, sleeve, tx hash, content hash)
+- `manifest.json` — provenance (generated_at, source snapshot `as_of`, filters used)
 
 ## License
 

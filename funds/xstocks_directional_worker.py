@@ -34,6 +34,8 @@ PORTFOLIO_FILE = Path.home() / '.hermes/brain/paper_portfolio.json'
 STATUS_FILE = Path.home() / '.hermes/brain/status/xstocks_directional.json'
 STATE_FILE = Path.home() / '.hermes/brain/state/xstocks_directional_state.json'
 
+from policy import sleeve_targets_for, worker_cfg
+
 UNIVERSE = [
     {'symbol': 'AAPLx',  'yahoo': 'AAPL',  'underlying': 'AAPL'},
     {'symbol': 'AMZNx',  'yahoo': 'AMZN',  'underlying': 'AMZN'},
@@ -41,14 +43,16 @@ UNIVERSE = [
     {'symbol': 'GOOGLx', 'yahoo': 'GOOGL', 'underlying': 'GOOGL'},
 ]
 
-PRINCIPAL_USD = 35.00
-MAX_OPEN_POSITIONS = 4
-SMA_WINDOW = 20
-MOMENTUM_WINDOW = 5
-ENTRY_MOMENTUM_PCT = 1.0
-EXIT_MOMENTUM_PCT = -1.0
-STOP_LOSS_PCT = -7.0
-FUND_SLEEVES = ['fund_90_10_growth.xstocks_directional']
+_cfg = worker_cfg('xstocks_directional')
+_targets = sleeve_targets_for('xstocks_directional')
+FUND_SLEEVES = list(_targets.keys()) or ['fund_90_10_growth.xstocks_directional']
+PRINCIPAL_USD = next(iter(_targets.values()), 25.00) if _targets else 25.00
+MAX_OPEN_POSITIONS = _cfg.get('max_open_positions', 4)
+SMA_WINDOW = _cfg.get('sma_window', 20)
+MOMENTUM_WINDOW = _cfg.get('momentum_window', 5)
+ENTRY_MOMENTUM_PCT = _cfg.get('entry_momentum_pct', 1.0)
+EXIT_MOMENTUM_PCT = _cfg.get('exit_momentum_pct', -1.0)
+STOP_LOSS_PCT = _cfg.get('stop_loss_pct', -7.0)
 
 YAHOO_URL = (
     'https://query1.finance.yahoo.com/v8/finance/chart/{sym}'
@@ -175,6 +179,8 @@ def run_once():
                 new_pos = {
                     'id': f'{WORKER_NAME}_{u["symbol"]}_{int(datetime.now().timestamp())}',
                     'worker': WORKER_NAME,
+                    'fund': FUND_SLEEVES[0].split('.', 1)[0],
+                    'sleeve': FUND_SLEEVES[0],
                     'symbol': u['symbol'],
                     'underlying': u['underlying'],
                     'side': 'long',

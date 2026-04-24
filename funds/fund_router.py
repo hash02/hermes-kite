@@ -4,34 +4,38 @@ Fund Router — maps Hermes paper positions to three fund profiles.
 
 Each fund has a target allocation across sleeves. This router reads the live
 paper_portfolio.json, attributes positions to their fund sleeves via a worker
-mapping, and writes per-fund status files the dashboard can render.
+mapping pulled from config/policy.json (via funds/policy.py), and writes
+per-fund status files the dashboard can render.
 
 Usage:
     python3 fund_router.py                  # one-shot status write
     python3 fund_router.py --verbose        # print per-fund detail
-    python3 fund_router.py --capital 10000  # change assumed fund capital
+    python3 fund_router.py --capital 10000  # override assumed fund capital
 
 Outputs (written to ~/.hermes/brain/funds/):
     fund_60_40.json, fund_75_25.json, fund_90_10.json
 
 Reads:
     ~/.hermes/brain/paper_portfolio.json
+    config/policy.json (via funds/policy.py; falls back to built-in defaults)
 """
 from __future__ import annotations
 import argparse
 import json
-import os
 import time
 from collections import defaultdict
 from pathlib import Path
+
+from policy import fund_router_config
 
 HOME = Path.home()
 PORTFOLIO = HOME / ".hermes" / "brain" / "paper_portfolio.json"
 FUND_DIR = HOME / ".hermes" / "brain" / "funds"
 
-# Fund definitions. Each sleeve has a target percent of fund capital and a
-# list of workers whose positions feed that sleeve. "cash" sleeve is residual.
-FUND_CONFIG = {
+# Built-in fallback if config/policy.json is missing or malformed. The router
+# prefers the policy file; this dict keeps the worker list stable for legacy
+# environments that haven't adopted policy yet.
+_FALLBACK_FUND_CONFIG = {
     "fund_60_40_income": {
         "name": "FUND 60/40 — Hermes Steady Monthly Income",
         "target_annual_return_pct": 7.4,
@@ -75,6 +79,11 @@ FUND_CONFIG = {
 }
 
 
+def get_fund_config() -> dict:
+    cfg = fund_router_config()
+    return cfg if cfg else _FALLBACK_FUND_CONFIG
+
+
 def load_portfolio() -> list:
     if not PORTFOLIO.exists():
         return []
@@ -97,6 +106,12 @@ def compute_fund_status(fund_id: str, fund_cfg: dict, positions: list, capital: 
     for p in positions:
         w = p.get("worker", "")
         if w not in worker_to_sleeve:
+            continue
+        # If a position is fund-scoped (workers that ship per-sleeve sizing tag
+        # positions with `fund`), only attribute it to its own fund. Legacy
+        # untagged positions still attribute to every fund that lists the worker.
+        pos_fund = p.get("fund")
+        if pos_fund and pos_fund != fund_id:
             continue
         sleeve_id = worker_to_sleeve[w]
         s = sleeve_agg[sleeve_id]
@@ -176,6 +191,7 @@ def main():
     positions = load_portfolio()
     print(f"[fund_router] portfolio positions loaded: {len(positions)}")
 
+    FUND_CONFIG = get_fund_config()
     for fund_id, fund_cfg in FUND_CONFIG.items():
         status = compute_fund_status(fund_id, fund_cfg, positions, args.capital)
         out = FUND_DIR / f"{fund_id}.json"

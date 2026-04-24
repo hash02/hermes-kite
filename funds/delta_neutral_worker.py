@@ -5,21 +5,19 @@ Delta-Neutral Funding Rate Arbitrage Worker
 Mechanism: SHORT PERP + LONG SPOT = net-zero directional exposure.
 Revenue: funding payments only. Risk: liquidation, sign-flip, exchange risk.
 
-Paper-mode worker that funds two sleeves:
-  - fund_60_40_income.delta_neutral  (25% = $250 target)
-  - fund_75_25_balanced.delta_neutral (20% = $200 target)
+Per-sleeve paper-mode worker. Each sleeve in SLEEVE_TARGETS gets its own
+pool of open positions sized to that sleeve's target deployment, tagged with
+`fund` so fund_router attributes them only to the owning fund.
 
 Cycle work (default mode, no args):
   1. Pull live Binance funding rates (public endpoint, no auth)
   2. Rank by |annualized rate|, threshold MIN_ANNUALIZED_RATE
-  3. Accrue paper funding on existing open positions:
-     size_usd += notional * funding_rate * cycles_elapsed
-  4. Unwind (resolve) any position whose current funding sign flipped from entry
-     sign (UNWIND_ON_SIGN_FLIP behaviour)
-  5. If we're below MAX_OPEN_POSITIONS and top opps qualify, open new paper
-     positions tagged worker="delta_neutral_funding" so fund_router attributes
-     them to both delta_neutral sleeves
-  6. Emit status file + upsert into paper_portfolio.json
+  3. Per sleeve:
+     a. Accrue paper funding on existing open positions
+     b. Resolve positions whose funding sign flipped from entry sign
+     c. Fill remaining slots from the ranked candidate list (skipping symbols
+        already held in this sleeve) until deployed >= sleeve target
+  4. Emit status file + persist paper_portfolio.json
 
 Scan-only mode:
   python3 delta_neutral_worker.py --scan
@@ -31,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import os
 import time
 import urllib.request
@@ -38,23 +37,28 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
 
+from policy import sleeve_targets_for, worker_cfg
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-# --- Config (mirrors funds/DELTA_NEUTRAL_WORKER_PROPOSAL.md) ---
-MIN_ANNUALIZED_RATE = 8.0         # % annualized, absolute
-MAX_POSITION_USD = 50.0
-MAX_OPEN_POSITIONS = 2
-MAX_TOTAL_DEPLOYED = 400.0
-MIN_FUNDING_HISTORY_HOURS = 24    # 3 cycles of same-sign history
-UNWIND_ON_SIGN_FLIP = True
-# In paper mode, allow a position on the first sighting of a qualifying |rate|
-# without waiting for same-sign confirmation. Live mode must flip this off.
-PAPER_MODE_RELAXED_GATE = True
+WORKER_NAME = "delta_neutral_funding"
+
+# --- Config (policy-driven; built-in defaults below if policy.json missing) ---
+_cfg = worker_cfg(WORKER_NAME)
+MIN_ANNUALIZED_RATE = _cfg.get("min_annualized_rate_pct", 8.0)
+MAX_POSITION_USD = _cfg.get("max_position_usd", 50.0)
+MIN_FUNDING_HISTORY_HOURS = _cfg.get("min_funding_history_hours", 24)
+UNWIND_ON_SIGN_FLIP = _cfg.get("unwind_on_sign_flip", True)
+PAPER_MODE_RELAXED_GATE = _cfg.get("paper_mode_relaxed_gate", True)
+
+_FALLBACK_TARGETS = {
+    "fund_60_40_income.delta_neutral": 250.0,
+    "fund_75_25_balanced.delta_neutral": 200.0,
+}
+SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
 
 BINANCE_FUNDING_URL = "https://fapi.binance.com/fapi/v1/premiumIndex"
-
-WORKER_NAME = "delta_neutral_funding"
 
 HOME = Path.home()
 HERMES = HOME / ".hermes" / "brain"
@@ -155,20 +159,33 @@ def save_portfolio_atomic(pf: dict) -> None:
     tmp.replace(PORTFOLIO_FILE)
 
 
-def existing_dn_positions(pf: dict) -> list[dict]:
-    return [p for p in pf.get("positions", []) if isinstance(p, dict)
-            and p.get("worker") == WORKER_NAME and not p.get("resolved")]
+def positions_for_sleeve(pf: dict, sleeve_id: str, open_only: bool = True) -> list[dict]:
+    out = []
+    for p in pf.get("positions", []):
+        if not isinstance(p, dict):
+            continue
+        if p.get("worker") != WORKER_NAME:
+            continue
+        if p.get("sleeve") != sleeve_id:
+            continue
+        if open_only and p.get("resolved"):
+            continue
+        out.append(p)
+    return out
 
 
-def position_id(symbol: str) -> str:
-    return f"dn_{symbol.lower()}"
+def position_id(symbol: str, sleeve_id: str) -> str:
+    return f"dn_{symbol.lower()}_{sleeve_id}"
 
 
-def open_position(pf: dict, opp: FundingOpp, size_usd: float) -> dict:
+def open_position(pf: dict, opp: FundingOpp, size_usd: float, sleeve_id: str) -> dict:
     now = time.time()
+    fund_id = sleeve_id.split(".", 1)[0]
     pos = {
-        "id": position_id(opp.symbol),
+        "id": position_id(opp.symbol, sleeve_id),
         "worker": WORKER_NAME,
+        "fund": fund_id,
+        "sleeve": sleeve_id,
         "symbol": opp.symbol,
         "direction": "DELTA_NEUTRAL",
         "entry_price": opp.mark_price,
@@ -209,8 +226,7 @@ def accrue_and_check_flip(pos: dict, cur_opp: FundingOpp | None) -> str:
     # Funding cycles elapsed (3 per day, 8h each)
     dt_days = max(0.0, (now - last) / 86400.0)
     cycles_elapsed = dt_days * 3.0
-    # Short perp earns funding when rate > 0; long perp earns when rate < 0.
-    # We're sign-agnostic at entry — always take the correct side — so revenue
+    # Sign-agnostic at entry — always take the correct side — so revenue
     # is |rate| * cycles_elapsed * notional per cycle.
     rev = abs(cur_opp.funding_rate) * cycles_elapsed * notional
     pos["cumulative_funding_usd"] = round(pos.get("cumulative_funding_usd", 0) + rev, 8)
@@ -219,7 +235,6 @@ def accrue_and_check_flip(pos: dict, cur_opp: FundingOpp | None) -> str:
     pos["high_water_mark"] = max(pos.get("high_water_mark", notional), pos["size_usd"])
     pos["low_water_mark"] = min(pos.get("low_water_mark", notional), pos["size_usd"])
     pos["last_update"] = now
-    # Sign flip?
     cur_sign = 1 if cur_opp.funding_rate > 0 else -1
     if UNWIND_ON_SIGN_FLIP and cur_sign != pos.get("entry_sign", cur_sign):
         return "flip"
@@ -234,17 +249,63 @@ def resolve_position(pos: dict, reason: str) -> None:
     pos["resolve_reason"] = reason
 
 
+# ---------- per-sleeve fill ----------
+
+def fill_sleeve(pf: dict, state: dict, ranked: list[FundingOpp],
+                by_symbol: dict[str, FundingOpp], sleeve_id: str,
+                target_usd: float) -> tuple[list[dict], int, int]:
+    """Run accrual + resolve + open for one sleeve. Returns (open_positions, opened, resolved)."""
+    open_dn = positions_for_sleeve(pf, sleeve_id)
+    resolved_count = 0
+    for pos in open_dn:
+        cur = by_symbol.get(pos.get("symbol", ""))
+        result = accrue_and_check_flip(pos, cur)
+        if result == "flip":
+            resolve_position(pos, "funding_sign_flipped")
+            resolved_count += 1
+            logger.info("delta_neutral[%s]: resolved %s on sign flip, pnl=%.6f",
+                        sleeve_id, pos.get("symbol"), pos.get("pnl_usd", 0))
+
+    open_dn = positions_for_sleeve(pf, sleeve_id)
+    deployed = sum(p.get("notional_usd", p.get("size_usd", 0)) for p in open_dn)
+    have_symbols = {p.get("symbol") for p in open_dn}
+    max_slots = math.ceil(target_usd / MAX_POSITION_USD)
+
+    opened = 0
+    for opp in ranked:
+        if len(open_dn) >= max_slots:
+            break
+        if deployed >= target_usd:
+            break
+        if opp.symbol in have_symbols:
+            continue
+        if not PAPER_MODE_RELAXED_GATE and not check_same_sign_history(state, opp.symbol, opp.funding_rate):
+            continue
+        size = min(MAX_POSITION_USD, target_usd - deployed)
+        if size < 1.0:
+            break
+        pos = open_position(pf, opp, size, sleeve_id)
+        open_dn.append(pos)
+        have_symbols.add(opp.symbol)
+        deployed += size
+        opened += 1
+        logger.info("delta_neutral[%s]: opened %s size=$%.2f entry_apy=%.2f%%",
+                    sleeve_id, opp.symbol, size, opp.annualized_pct)
+    return open_dn, opened, resolved_count
+
+
 # ---------- status ----------
 
-def write_status(open_positions: list[dict], total_deployed: float,
-                 opps: list[FundingOpp], qualifying: int, ok: bool,
-                 error_msg: str | None = None) -> None:
+def write_status(per_sleeve: dict[str, list[dict]], opps: list[FundingOpp],
+                 qualifying: int, ok: bool, error_msg: str | None = None) -> None:
     STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
     now_iso = datetime.now(timezone.utc).astimezone().isoformat()
-    total_pnl = sum(p.get("pnl_usd", 0) for p in open_positions)
+    all_open = [p for ps in per_sleeve.values() for p in ps]
+    total_deployed = sum(p.get("notional_usd", p.get("size_usd", 0)) for p in all_open)
+    total_pnl = sum(p.get("pnl_usd", 0) for p in all_open)
     avg_apy = 0.0
-    if open_positions:
-        avg_apy = sum(abs(p.get("entry_annualized_pct", 0)) for p in open_positions) / len(open_positions)
+    if all_open:
+        avg_apy = sum(abs(p.get("entry_annualized_pct", 0)) for p in all_open) / len(all_open)
     status = {
         "worker_name": WORKER_NAME,
         "strategy_type": "delta_neutral",
@@ -252,11 +313,20 @@ def write_status(open_positions: list[dict], total_deployed: float,
         "last_heartbeat": now_iso,
         "cycle_count": 1,
         "position_summary": {
-            "open_positions": len(open_positions),
+            "open_positions": len(all_open),
             "closed_positions": 0,
             "total_capital_deployed_usd": round(total_deployed, 4),
             "realized_pnl_usd": 0.0,
             "unrealized_pnl_usd": round(total_pnl, 6),
+            "by_sleeve": {
+                sid: {
+                    "open_positions": len(ps),
+                    "deployed_usd": round(
+                        sum(p.get("notional_usd", p.get("size_usd", 0)) for p in ps), 4
+                    ),
+                }
+                for sid, ps in per_sleeve.items()
+            },
         },
         "performance": {
             "avg_entry_apy_pct": round(avg_apy, 4),
@@ -265,9 +335,9 @@ def write_status(open_positions: list[dict], total_deployed: float,
             "win_rate": None,
         },
         "risk": {
-            "position_sizing_method": "fixed_max_position_usd",
+            "position_sizing_method": "per_sleeve_target",
             "max_position_usd": MAX_POSITION_USD,
-            "max_total_deployed_usd": MAX_TOTAL_DEPLOYED,
+            "sleeve_targets_usd": SLEEVE_TARGETS,
             "unwind_on_sign_flip": UNWIND_ON_SIGN_FLIP,
             "paper_mode_relaxed_gate": PAPER_MODE_RELAXED_GATE,
             "counterparty": "binance_perp_public",
@@ -278,10 +348,7 @@ def write_status(open_positions: list[dict], total_deployed: float,
             "min_funding_history_hours": MIN_FUNDING_HISTORY_HOURS,
             "universe_size": len(opps),
             "qualifying_count": qualifying,
-            "fund_sleeves": [
-                "fund_60_40_income.delta_neutral",
-                "fund_75_25_balanced.delta_neutral",
-            ],
+            "fund_sleeves": list(SLEEVE_TARGETS.keys()),
         },
         "errors_last_24h": 0 if ok else 1,
         "health_check": "green" if ok else "yellow",
@@ -297,7 +364,8 @@ def run_once() -> None:
     state = load_state()
     opps = fetch_binance_funding()
     if not opps:
-        write_status([], 0.0, [], 0, ok=False, error_msg="binance fetch returned no data")
+        write_status({sid: [] for sid in SLEEVE_TARGETS}, [], 0,
+                     ok=False, error_msg="binance fetch returned no data")
         logger.warning("delta_neutral: no funding data")
         return
 
@@ -306,51 +374,29 @@ def run_once() -> None:
     by_symbol = {o.symbol: o for o in opps}
 
     pf = load_portfolio()
-    open_dn = existing_dn_positions(pf)
 
-    # 1. Accrue + sign-flip check on existing open positions
-    for pos in open_dn:
-        cur = by_symbol.get(pos.get("symbol", ""))
-        result = accrue_and_check_flip(pos, cur)
-        if result == "flip":
-            resolve_position(pos, "funding_sign_flipped")
-            logger.info("delta_neutral: resolved %s on sign flip, pnl=%.6f",
-                        pos.get("symbol"), pos.get("pnl_usd", 0))
+    per_sleeve: dict[str, list[dict]] = {}
+    total_opened = 0
+    total_resolved = 0
+    for sleeve_id, target in SLEEVE_TARGETS.items():
+        open_dn, opened, resolved = fill_sleeve(pf, state, ranked, by_symbol, sleeve_id, target)
+        per_sleeve[sleeve_id] = open_dn
+        total_opened += opened
+        total_resolved += resolved
 
-    # 2. Recount still-open positions after resolves
-    open_dn = existing_dn_positions(pf)
-    total_deployed = sum(p.get("notional_usd", p.get("size_usd", 0)) for p in open_dn)
-
-    # 3. Open new positions until we hit MAX_OPEN_POSITIONS or MAX_TOTAL_DEPLOYED
-    have_symbols = {p.get("symbol") for p in open_dn}
-    for opp in ranked:
-        if len(open_dn) >= MAX_OPEN_POSITIONS:
-            break
-        if opp.symbol in have_symbols:
-            continue
-        if total_deployed + MAX_POSITION_USD > MAX_TOTAL_DEPLOYED:
-            break
-        # Gate: same-sign history OR paper-mode relaxed
-        if not PAPER_MODE_RELAXED_GATE and not check_same_sign_history(state, opp.symbol, opp.funding_rate):
-            continue
-        size = MAX_POSITION_USD
-        pos = open_position(pf, opp, size)
-        open_dn.append(pos)
-        total_deployed += size
-        logger.info("delta_neutral: opened %s size=$%.2f entry_apy=%.2f%%",
-                    opp.symbol, size, opp.annualized_pct)
-
-    # 4. Persist everything
     save_portfolio_atomic(pf)
     state["last_scan"] = int(time.time())
     save_state(state)
 
-    # 5. Emit status
-    write_status(open_dn, total_deployed, opps, len(ranked), ok=True)
+    write_status(per_sleeve, opps, len(ranked), ok=True)
 
-    total_pnl = sum(p.get("pnl_usd", 0) for p in open_dn)
-    print(f"[delta_neutral] open={len(open_dn)} deployed=${total_deployed:.2f} "
-          f"cum_funding=${total_pnl:.6f} universe={len(opps)} qualifying={len(ranked)}")
+    all_open = [p for ps in per_sleeve.values() for p in ps]
+    total_deployed = sum(p.get("notional_usd", p.get("size_usd", 0)) for p in all_open)
+    total_pnl = sum(p.get("pnl_usd", 0) for p in all_open)
+    print(f"[delta_neutral] sleeves={len(per_sleeve)} open={len(all_open)} "
+          f"deployed=${total_deployed:.2f} cum_funding=${total_pnl:.6f} "
+          f"opened={total_opened} resolved={total_resolved} "
+          f"universe={len(opps)} qualifying={len(ranked)}")
 
 
 def scan(min_rate: float) -> None:
@@ -366,6 +412,7 @@ def scan(min_rate: float) -> None:
     print(f"\n=== Delta-Neutral Funding Scan ===")
     print(f"Universe: {len(opps)} Binance perps | min rate: {min_rate}% annualized")
     print(f"Qualifying: {len(ranked)} | same-sign history required: {MIN_FUNDING_HISTORY_HOURS}h")
+    print(f"Sleeve targets: {SLEEVE_TARGETS}")
     print()
     print(f"{'SYM':<14} {'ANNLZ%':>8} {'PER-CYC':>10} {'MARK':>14} {'GATE':>6} {'ACTION':<26}")
     for o, ss in qualified[:15]:
