@@ -90,7 +90,7 @@ def _load_policy() -> dict:
         return {}
     try:
         return json.loads(POLICY_FILE.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {}
 
 
@@ -99,7 +99,7 @@ def _load_live_portfolio() -> list:
         return []
     try:
         d = json.loads(LIVE_PORTFOLIO.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return []
     return d.get("positions", []) if isinstance(d, dict) else (d or [])
 
@@ -109,7 +109,7 @@ def _load_summary() -> dict:
         return {"sleeves": {}}
     try:
         return json.loads(PORTFOLIO_SUMMARY.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {"sleeves": {}}
 
 

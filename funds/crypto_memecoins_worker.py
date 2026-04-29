@@ -16,7 +16,6 @@ Data source: https://api.coingecko.com/api/v3/coins/markets (free tier, no key)
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 import urllib.parse
@@ -24,6 +23,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from engine.logging_setup import setup_logger
 from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "crypto_memecoins"
@@ -48,8 +48,7 @@ CG_URL = (
     "&per_page=50&page=1&price_change_percentage=7d"
 )
 
-log = logging.getLogger(WORKER_NAME)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log = setup_logger(WORKER_NAME)
 
 UA = {"User-Agent": "hermes-crypto-memecoins/1.0"}
 
@@ -87,7 +86,7 @@ def load_json(p, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 

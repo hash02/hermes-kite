@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import math
 import os
 import time
@@ -39,12 +38,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
+from engine.logging_setup import setup_logger
 from engine.policy import sleeve_targets_for, worker_cfg
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
 WORKER_NAME = "delta_neutral_funding"
+logger = setup_logger(WORKER_NAME)
 
 # --- Config (policy-driven; built-in defaults below if policy.json missing) ---
 _cfg = worker_cfg(WORKER_NAME)

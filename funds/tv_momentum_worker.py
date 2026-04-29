@@ -20,12 +20,12 @@ Fund coverage: fund_90_10_growth.directional_momentum
 """
 
 import json
-import logging
 import os
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from engine.logging_setup import setup_logger
 from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "tv_momentum"
@@ -53,8 +53,7 @@ LOOKBACK_DAYS = _cfg.get("lookback_days", 7)
 
 KLINES_URL = "https://api.binance.com/api/v3/klines?symbol={sym}&interval=1d&limit=10"
 
-log = logging.getLogger(WORKER_NAME)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log = setup_logger(WORKER_NAME)
 
 
 def fetch_klines(binance_sym):
@@ -84,7 +83,7 @@ def load_json(p, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 

@@ -56,7 +56,7 @@ def _load_json(path: Path, default):
         return default
     try:
         return json.loads(path.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 

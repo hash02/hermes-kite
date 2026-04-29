@@ -23,13 +23,13 @@ Fund coverage: fund_90_10_growth.xstocks_directional  (the last unfunded sleeve)
 """
 
 import json
-import logging
 import os
 import statistics
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 
+from engine.logging_setup import setup_logger
 from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "xstocks_directional"
@@ -57,8 +57,7 @@ STOP_LOSS_PCT = _cfg.get("stop_loss_pct", -7.0)
 
 YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=45d"
 
-log = logging.getLogger(WORKER_NAME)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log = setup_logger(WORKER_NAME)
 
 
 def fetch_closes(yahoo_sym):
@@ -106,7 +105,7 @@ def load_json(p, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 

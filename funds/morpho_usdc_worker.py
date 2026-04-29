@@ -76,7 +76,7 @@ def load_portfolio():
         }
     try:
         return json.loads(PORTFOLIO_FILE.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {"positions": [], "realized_pnl": 0.0}
 
 

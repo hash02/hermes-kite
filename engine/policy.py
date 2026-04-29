@@ -32,7 +32,10 @@ def _load_policy() -> dict:
         return {}
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
+        # Malformed or unreadable policy file. Fall back to empty so workers
+        # use their built-in defaults; CI's json-validate hook catches malformed
+        # commits before they land.
         return {}
 
 
@@ -85,11 +88,13 @@ def sleeve_targets_for(worker_name: str) -> dict:
     # Lazy import — avoids a circular dependency at module load.
     try:
         from engine.risk_engine import apply_engine  # type: ignore[no-redef]
-    except Exception:
+    except ImportError:
         return static
     try:
         return apply_engine(worker_name, static)
-    except Exception:
+    except Exception:  # noqa: BLE001 — engine failure must not break the worker
+        # Engine bug should not take a worker offline; fall back to static
+        # sizing and let the next reconcile run flag the inconsistency.
         return static
 
 

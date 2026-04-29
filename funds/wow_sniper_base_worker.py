@@ -22,13 +22,13 @@ Data: https://api.dexscreener.com/latest/dex/search?q=chain:base
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from engine.logging_setup import setup_logger
 from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "wow_sniper_base"
@@ -53,8 +53,7 @@ STALE_EXIT_DAYS = _cfg.get("stale_exit_days", 60)
 DEX_SEARCH = "https://api.dexscreener.com/latest/dex/search?q=base"
 DEX_PAIR = "https://api.dexscreener.com/latest/dex/tokens/"
 
-log = logging.getLogger(WORKER_NAME)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log = setup_logger(WORKER_NAME)
 
 UA = {"User-Agent": "hermes-wow-sniper-base/1.0"}
 
@@ -121,7 +120,7 @@ def load_json(p, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 

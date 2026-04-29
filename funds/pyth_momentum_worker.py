@@ -24,7 +24,6 @@ Historical EMA is computed from Pyth's benchmarks endpoint:
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 import urllib.parse
@@ -32,6 +31,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from engine.logging_setup import setup_logger
 from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "pyth_momentum"
@@ -78,8 +78,7 @@ STOP_LOSS_PCT = _cfg.get("stop_loss_pct", -6.0)
 HERMES_LATEST = "https://hermes.pyth.network/api/latest_price_feeds"
 PYTH_HISTORY = "https://benchmarks.pyth.network/v1/shims/tradingview/history"
 
-log = logging.getLogger(WORKER_NAME)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log = setup_logger(WORKER_NAME)
 
 UA = {"User-Agent": "hermes-pyth-momentum/1.0"}
 
@@ -147,7 +146,7 @@ def load_json(p, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 

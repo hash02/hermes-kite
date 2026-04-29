@@ -20,12 +20,12 @@ Fund coverage: fund_75_25_balanced.tokenized_stocks
 """
 
 import json
-import logging
 import os
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from engine.logging_setup import setup_logger
 from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "xstocks_grid"
@@ -46,8 +46,7 @@ PRINCIPAL_USD = next(iter(_targets.values()), 12.50) if _targets else 12.50
 DOUBLE_DOWN_DROP_PCT = _cfg.get("double_down_drop_pct", 5.0)
 TRIM_RISE_PCT = _cfg.get("trim_rise_pct", 10.0)
 
-log = logging.getLogger(WORKER_NAME)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log = setup_logger(WORKER_NAME)
 
 
 def fetch_close(stooq_sym):
@@ -75,7 +74,7 @@ def load_json(p, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 

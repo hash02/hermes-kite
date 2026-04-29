@@ -20,13 +20,13 @@ Strategy (paper, MVP — edge is real but thin, sizing tiny):
 """
 
 import json
-import logging
 import math
 import os
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from engine.logging_setup import setup_logger
 from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "polymarket_btc_updown"
@@ -46,8 +46,7 @@ _FALLBACK_TARGETS = {
 }
 SLEEVE_TARGETS = sleeve_targets_for(WORKER_NAME) or _FALLBACK_TARGETS
 
-log = logging.getLogger(WORKER_NAME)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log = setup_logger(WORKER_NAME)
 
 
 def fetch_markets():
@@ -106,7 +105,7 @@ def load_json(p, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 

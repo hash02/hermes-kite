@@ -13,7 +13,6 @@ Not a worker on its own. Import-only.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import statistics
 import time
@@ -111,7 +110,7 @@ def load_portfolio():
         }
     try:
         return json.loads(PORTFOLIO_FILE.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {"positions": [], "realized_pnl": 0.0}
 
 
@@ -126,7 +125,7 @@ def _load_json(p: Path, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 
@@ -293,11 +292,9 @@ def write_status(cfg: GridConfig, per_sleeve_open, mark, pivot, ok, error_msg: s
 
 
 def run_grid(cfg: GridConfig):
-    log = logging.getLogger(cfg.worker_name)
-    if not log.handlers:
-        logging.basicConfig(
-            level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-        )
+    from engine.logging_setup import setup_logger
+
+    log = setup_logger(cfg.worker_name)
 
     mark = fetch_mark(cfg, log)
     pivot = fetch_pivot(cfg, log)
