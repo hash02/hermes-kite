@@ -15,11 +15,14 @@ worker falls back to Superstate's public API shape and surfaces the error.
 
 Shared engine: yield_base.run_yield(cfg).
 """
+
 from __future__ import annotations
+
 import json
 import urllib.request
-from yield_base import YieldConfig, run_yield
-from policy import sleeve_targets_for
+
+from engine.policy import sleeve_targets_for
+from engine.yield_base import YieldConfig, run_yield
 
 WORKER_NAME = "superstate_uscc"
 
@@ -29,8 +32,9 @@ SUPERSTATE_API = "https://api.superstate.co/v1/funds/uscc"
 
 
 def fetch_uscc_apy() -> tuple[float | None, str]:
-    req = urllib.request.Request(SUPERSTATE_API,
-                                 headers={"User-Agent": "hermes-superstate-uscc/1.0"})
+    req = urllib.request.Request(
+        SUPERSTATE_API, headers={"User-Agent": "hermes-superstate-uscc/1.0"}
+    )
     try:
         with urllib.request.urlopen(req, timeout=20) as r:
             data = json.loads(r.read())

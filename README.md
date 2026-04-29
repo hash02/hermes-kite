@@ -165,7 +165,7 @@ Public dashboard: https://bionicbanker.tech/portfolio
 ## Run locally
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[dev]"                       # install + dev tooling (ruff, mypy, coverage)
 export KITE_PRIVATE_KEY=0x...   # funded via https://faucet.gokite.ai/
 python3 funds/aave_usdc_worker.py
 python3 onchain/kite_executor.py  # settle latest portfolio delta on Kite

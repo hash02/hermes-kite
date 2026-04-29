@@ -33,12 +33,13 @@ CLI:
   python3 funds/nav_accounting.py --crystallize-mgmt       accrue+pay mgmt fees
   python3 funds/nav_accounting.py --crystallize-perf       accrue+pay perf fees
 """
+
 from __future__ import annotations
+
 import argparse
 import json
-import sys
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -48,6 +49,7 @@ NAV_LEDGER = REPO_ROOT / "data" / "nav_ledger.json"
 
 
 # ---------- IO ----------
+
 
 def _load_json(path: Path, default):
     if not path.exists():
@@ -70,10 +72,11 @@ def _parse_iso(s: str) -> datetime:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ---------- core NAV ----------
+
 
 @dataclass
 class NavSnapshot:
@@ -103,17 +106,23 @@ def _fund_cumulative_pnl(summary: dict, fund_id: str) -> float:
     return total
 
 
-def _accrued_mgmt_fee(gross_equity: float, mgmt_rate_annual: float,
-                      days_since_crystallization: int) -> float:
+def _accrued_mgmt_fee(
+    gross_equity: float, mgmt_rate_annual: float, days_since_crystallization: int
+) -> float:
     """Daily linear accrual on gross equity since last crystallization."""
     if mgmt_rate_annual <= 0 or days_since_crystallization <= 0:
         return 0.0
     return gross_equity * (mgmt_rate_annual / 100.0) * (days_since_crystallization / 365.0)
 
 
-def _accrued_perf_fee(nav_per_unit: float, hwm_per_unit: float,
-                      units: float, perf_rate: float,
-                      hurdle_rate_annual: float, days_since_crystallization: int) -> float:
+def _accrued_perf_fee(
+    nav_per_unit: float,
+    hwm_per_unit: float,
+    units: float,
+    perf_rate: float,
+    hurdle_rate_annual: float,
+    days_since_crystallization: int,
+) -> float:
     """Perf fee on the portion above HWM (with optional hurdle)."""
     if perf_rate <= 0 or units <= 0:
         return 0.0
@@ -127,9 +136,12 @@ def _accrued_perf_fee(nav_per_unit: float, hwm_per_unit: float,
     return per_unit_gain * units * (perf_rate / 100.0)
 
 
-def compute_nav(fund_id: str, policy: dict | None = None,
-                summary: dict | None = None,
-                ledger: dict | None = None) -> NavSnapshot | None:
+def compute_nav(
+    fund_id: str,
+    policy: dict | None = None,
+    summary: dict | None = None,
+    ledger: dict | None = None,
+) -> NavSnapshot | None:
     policy = policy if policy is not None else _load_json(POLICY_FILE, {})
     summary = summary if summary is not None else _load_json(PORTFOLIO_SUMMARY, {"sleeves": {}})
     ledger = ledger if ledger is not None else _load_json(NAV_LEDGER, {"funds": {}})
@@ -146,18 +158,24 @@ def compute_nav(fund_id: str, policy: dict | None = None,
 
     capital = float(fund_cfg.get("capital_usd", 0.0))
     gross_pnl = _fund_cumulative_pnl(summary, fund_id)
-    gross_equity = capital + gross_pnl - float(ledger_entry.get("cumulative_mgmt_fees_paid_usd", 0.0)) \
-                                      - float(ledger_entry.get("cumulative_perf_fees_paid_usd", 0.0))
+    gross_equity = (
+        capital
+        + gross_pnl
+        - float(ledger_entry.get("cumulative_mgmt_fees_paid_usd", 0.0))
+        - float(ledger_entry.get("cumulative_perf_fees_paid_usd", 0.0))
+    )
 
     units = float(ledger_entry.get("units_outstanding", capital))
     nav_per_unit_gross = (gross_equity / units) if units > 0 else 0.0
     hwm = float(ledger_entry.get("hwm_per_unit", 1.0))
 
     now = _now()
-    last_mgmt = _parse_iso(ledger_entry.get("last_mgmt_crystallization_date",
-                                            ledger_entry.get("inception_date")))
-    last_perf = _parse_iso(ledger_entry.get("last_perf_crystallization_date",
-                                            ledger_entry.get("inception_date")))
+    last_mgmt = _parse_iso(
+        ledger_entry.get("last_mgmt_crystallization_date", ledger_entry.get("inception_date"))
+    )
+    last_perf = _parse_iso(
+        ledger_entry.get("last_perf_crystallization_date", ledger_entry.get("inception_date"))
+    )
     inception = _parse_iso(ledger_entry.get("inception_date"))
 
     days_since_mgmt = max(0, (now - last_mgmt).days)
@@ -167,8 +185,9 @@ def compute_nav(fund_id: str, policy: dict | None = None,
     mgmt_accrued = _accrued_mgmt_fee(gross_equity, mgmt_rate, days_since_mgmt)
     # Perf fee is computed on NAV *net of mgmt accrual*
     nav_net_mgmt = (gross_equity - mgmt_accrued) / units if units > 0 else 0.0
-    perf_accrued = _accrued_perf_fee(nav_net_mgmt, hwm, units, perf_rate,
-                                     hurdle_rate, days_since_perf)
+    perf_accrued = _accrued_perf_fee(
+        nav_net_mgmt, hwm, units, perf_rate, hurdle_rate, days_since_perf
+    )
 
     nav_per_unit_net = ((gross_equity - mgmt_accrued - perf_accrued) / units) if units > 0 else 0.0
 
@@ -192,8 +211,12 @@ def compute_nav(fund_id: str, policy: dict | None = None,
         accrued_perf_fee_usd=round(perf_accrued, 4),
         nav_per_unit_net=round(nav_per_unit_net, 6),
         hwm_per_unit=round(hwm, 6),
-        cumulative_mgmt_fees_paid_usd=round(float(ledger_entry.get("cumulative_mgmt_fees_paid_usd", 0.0)), 4),
-        cumulative_perf_fees_paid_usd=round(float(ledger_entry.get("cumulative_perf_fees_paid_usd", 0.0)), 4),
+        cumulative_mgmt_fees_paid_usd=round(
+            float(ledger_entry.get("cumulative_mgmt_fees_paid_usd", 0.0)), 4
+        ),
+        cumulative_perf_fees_paid_usd=round(
+            float(ledger_entry.get("cumulative_perf_fees_paid_usd", 0.0)), 4
+        ),
         return_since_inception_pct=round(return_pct, 4),
         days_since_inception=days_since_inception,
         annualized_return_pct=round(annualized, 3),
@@ -202,8 +225,8 @@ def compute_nav(fund_id: str, policy: dict | None = None,
 
 # ---------- crystallization ----------
 
-def _crystallize_fee(kind: str, fund_id: str, policy: dict, summary: dict,
-                     ledger: dict) -> dict:
+
+def _crystallize_fee(kind: str, fund_id: str, policy: dict, summary: dict, ledger: dict) -> dict:
     """Move an accrued fee to 'paid'. Returns a delta report dict."""
     snap = compute_nav(fund_id, policy, summary, ledger)
     if snap is None:
@@ -216,31 +239,33 @@ def _crystallize_fee(kind: str, fund_id: str, policy: dict, summary: dict,
         fee_usd = snap.accrued_mgmt_fee_usd
         if fee_usd <= 0:
             entry["last_mgmt_crystallization_date"] = now_iso
-            return {"fund_id": fund_id, "kind": kind, "fee_usd": 0.0,
-                    "status": "no_accrual"}
+            return {"fund_id": fund_id, "kind": kind, "fee_usd": 0.0, "status": "no_accrual"}
         # Management fee is paid in USD — deducted from fund equity by
         # adding to cumulative_mgmt_fees_paid.
         entry["cumulative_mgmt_fees_paid_usd"] = round(
             float(entry.get("cumulative_mgmt_fees_paid_usd", 0.0)) + fee_usd, 6
         )
         entry["last_mgmt_crystallization_date"] = now_iso
-        return {"fund_id": fund_id, "kind": kind, "fee_usd": round(fee_usd, 4),
-                "status": "paid"}
+        return {"fund_id": fund_id, "kind": kind, "fee_usd": round(fee_usd, 4), "status": "paid"}
 
     if kind == "perf":
         fee_usd = snap.accrued_perf_fee_usd
         if fee_usd <= 0:
             entry["last_perf_crystallization_date"] = now_iso
-            return {"fund_id": fund_id, "kind": kind, "fee_usd": 0.0,
-                    "status": "no_accrual"}
+            return {"fund_id": fund_id, "kind": kind, "fee_usd": 0.0, "status": "no_accrual"}
         entry["cumulative_perf_fees_paid_usd"] = round(
             float(entry.get("cumulative_perf_fees_paid_usd", 0.0)) + fee_usd, 6
         )
         # HWM resets to new NAV (post-fee, which equals net NAV at this moment)
         entry["hwm_per_unit"] = round(snap.nav_per_unit_net, 6)
         entry["last_perf_crystallization_date"] = now_iso
-        return {"fund_id": fund_id, "kind": kind, "fee_usd": round(fee_usd, 4),
-                "new_hwm_per_unit": entry["hwm_per_unit"], "status": "paid"}
+        return {
+            "fund_id": fund_id,
+            "kind": kind,
+            "fee_usd": round(fee_usd, 4),
+            "new_hwm_per_unit": entry["hwm_per_unit"],
+            "status": "paid",
+        }
 
     return {"fund_id": fund_id, "kind": kind, "status": "unknown_kind"}
 
@@ -263,6 +288,7 @@ def crystallize(kind: str, fund_id: str | None = None) -> list[dict]:
 
 # ---------- statement ----------
 
+
 def _period_bounds(period: str) -> tuple[datetime, datetime]:
     """
     Accepts 'YYYY-MM' (month), 'YYYY-Qn' (quarter), 'YYYY' (annual).
@@ -271,26 +297,28 @@ def _period_bounds(period: str) -> tuple[datetime, datetime]:
     period = period.strip().upper()
     if len(period) == 4 and period.isdigit():
         year = int(period)
-        return (datetime(year, 1, 1, tzinfo=timezone.utc),
-                datetime(year + 1, 1, 1, tzinfo=timezone.utc))
+        return (
+            datetime(year, 1, 1, tzinfo=UTC),
+            datetime(year + 1, 1, 1, tzinfo=UTC),
+        )
     if "-Q" in period:
         year_s, q_s = period.split("-Q")
         year, q = int(year_s), int(q_s)
         start_m = (q - 1) * 3 + 1
         end_m = start_m + 3
-        start = datetime(year, start_m, 1, tzinfo=timezone.utc)
+        start = datetime(year, start_m, 1, tzinfo=UTC)
         if end_m > 12:
-            end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+            end = datetime(year + 1, 1, 1, tzinfo=UTC)
         else:
-            end = datetime(year, end_m, 1, tzinfo=timezone.utc)
+            end = datetime(year, end_m, 1, tzinfo=UTC)
         return start, end
     year_s, month_s = period.split("-")
     year, month = int(year_s), int(month_s)
-    start = datetime(year, month, 1, tzinfo=timezone.utc)
+    start = datetime(year, month, 1, tzinfo=UTC)
     if month == 12:
-        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        end = datetime(year + 1, 1, 1, tzinfo=UTC)
     else:
-        end = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+        end = datetime(year, month + 1, 1, tzinfo=UTC)
     return start, end
 
 
@@ -311,21 +339,25 @@ def generate_statement(fund_id: str, period: str) -> dict | None:
         if not sid.startswith(fund_id + "."):
             continue
         sleeve_short = sid.split(".", 1)[1]
-        sleeves.append({
-            "sleeve": sleeve_short,
-            "target_pct": s.get("target_pct"),
-            "target_usd": s.get("target_usd"),
-            "open_exposure_usd": s.get("open_exposure_usd"),
-            "drift_pct": s.get("drift_pct"),
-            "pnl_usd": s.get("pnl_usd"),
-            "pnl_pct_of_capital": round(
-                float(s.get("pnl_usd") or 0) / float(snap.capital_usd) * 100, 4
-            ) if snap.capital_usd else 0,
-            "funded": s.get("funded"),
-            "positions_total": s.get("positions_total"),
-            "resolved": s.get("resolved"),
-            "win_rate_pct": s.get("win_rate_pct"),
-        })
+        sleeves.append(
+            {
+                "sleeve": sleeve_short,
+                "target_pct": s.get("target_pct"),
+                "target_usd": s.get("target_usd"),
+                "open_exposure_usd": s.get("open_exposure_usd"),
+                "drift_pct": s.get("drift_pct"),
+                "pnl_usd": s.get("pnl_usd"),
+                "pnl_pct_of_capital": round(
+                    float(s.get("pnl_usd") or 0) / float(snap.capital_usd) * 100, 4
+                )
+                if snap.capital_usd
+                else 0,
+                "funded": s.get("funded"),
+                "positions_total": s.get("positions_total"),
+                "resolved": s.get("resolved"),
+                "win_rate_pct": s.get("win_rate_pct"),
+            }
+        )
     sleeves.sort(key=lambda x: -float(x.get("open_exposure_usd") or 0))
 
     fees = fund_cfg.get("fees", {}) or {}
@@ -370,6 +402,7 @@ def generate_statement(fund_id: str, period: str) -> dict | None:
 
 # ---------- CLI ----------
 
+
 def _print_nav(snap: NavSnapshot, fund_name: str = ""):
     print(f"\n=== {fund_name or snap.fund_id} ===")
     print(f"  inception   : {snap.days_since_inception} days ago")
@@ -381,10 +414,14 @@ def _print_nav(snap: NavSnapshot, fund_name: str = ""):
     print(f"  accrued mgmt fee : ${snap.accrued_mgmt_fee_usd:.4f}")
     print(f"  accrued perf fee : ${snap.accrued_perf_fee_usd:.4f}")
     print(f"  NAV/unit NET   : ${snap.nav_per_unit_net:.6f}  (HWM ${snap.hwm_per_unit:.6f})")
-    print(f"  return       : {snap.return_since_inception_pct:+.3f}%  "
-          f"annualized {snap.annualized_return_pct:+.2f}%")
-    print(f"  fees paid to date: mgmt ${snap.cumulative_mgmt_fees_paid_usd:.2f}  "
-          f"perf ${snap.cumulative_perf_fees_paid_usd:.2f}")
+    print(
+        f"  return       : {snap.return_since_inception_pct:+.3f}%  "
+        f"annualized {snap.annualized_return_pct:+.2f}%"
+    )
+    print(
+        f"  fees paid to date: mgmt ${snap.cumulative_mgmt_fees_paid_usd:.2f}  "
+        f"perf ${snap.cumulative_perf_fees_paid_usd:.2f}"
+    )
 
 
 def _print_statement(stmt: dict):
@@ -395,12 +432,12 @@ def _print_statement(stmt: dict):
     fees = stmt["fees"]
     accr = stmt["fee_accrual"]
     print()
-    print(f"  Fund profile:")
+    print("  Fund profile:")
     print(f"    target annual return : {stmt['fund_profile']['target_annual_return_pct']}%")
     print(f"    max drawdown budget  : {stmt['fund_profile']['max_drawdown_pct']}%")
     print(f"    payout cadence       : {stmt['fund_profile']['payout_cadence']}")
     print()
-    print(f"  NAV:")
+    print("  NAV:")
     print(f"    capital           : ${nav['capital_usd']:,.2f}")
     print(f"    gross PnL         : ${nav['gross_pnl_usd']:+,.4f}")
     print(f"    gross equity      : ${nav['gross_equity_usd']:,.4f}")
@@ -408,39 +445,57 @@ def _print_statement(stmt: dict):
     print(f"    NAV/unit gross    : ${nav['nav_per_unit_gross']:.6f}")
     print(f"    NAV/unit NET      : ${nav['nav_per_unit_net']:.6f}")
     print(f"    HWM               : ${nav['hwm_per_unit']:.6f}")
-    print(f"    return since incep: {nav['return_since_inception_pct']:+.3f}%  "
-          f"(annualized {nav['annualized_return_pct']:+.2f}%)")
+    print(
+        f"    return since incep: {nav['return_since_inception_pct']:+.3f}%  "
+        f"(annualized {nav['annualized_return_pct']:+.2f}%)"
+    )
     print()
-    print(f"  Fees:")
-    print(f"    mgmt {fees['management_fee_annual_pct']}% annual | "
-          f"perf {fees['performance_fee_pct']}% over HWM | "
-          f"hurdle {fees['hurdle_rate_annual_pct']}% annual")
-    print(f"    accrued unpaid    : mgmt ${accr['accrued_mgmt_fee_usd']:.4f}  "
-          f"perf ${accr['accrued_perf_fee_usd']:.4f}")
-    print(f"    cumulative paid   : mgmt ${accr['cumulative_mgmt_fees_paid_usd']:.4f}  "
-          f"perf ${accr['cumulative_perf_fees_paid_usd']:.4f}")
+    print("  Fees:")
+    print(
+        f"    mgmt {fees['management_fee_annual_pct']}% annual | "
+        f"perf {fees['performance_fee_pct']}% over HWM | "
+        f"hurdle {fees['hurdle_rate_annual_pct']}% annual"
+    )
+    print(
+        f"    accrued unpaid    : mgmt ${accr['accrued_mgmt_fee_usd']:.4f}  "
+        f"perf ${accr['accrued_perf_fee_usd']:.4f}"
+    )
+    print(
+        f"    cumulative paid   : mgmt ${accr['cumulative_mgmt_fees_paid_usd']:.4f}  "
+        f"perf ${accr['cumulative_perf_fees_paid_usd']:.4f}"
+    )
     print()
-    print(f"  Sleeve detail (sorted by exposure):")
+    print("  Sleeve detail (sorted by exposure):")
     print(f"    {'sleeve':<24} {'target':>8} {'open':>10} {'drift':>9} {'PnL':>10} {'% cap':>8}")
     for s in stmt["sleeves"]:
-        print(f"    {s['sleeve']:<24} {s['target_pct']:>6}%  "
-              f"${s['open_exposure_usd']:>8,.2f} {s['drift_pct']:>+7.1f}% "
-              f"${s['pnl_usd']:>+8,.2f} {s['pnl_pct_of_capital']:>+6.2f}%")
+        print(
+            f"    {s['sleeve']:<24} {s['target_pct']:>6}%  "
+            f"${s['open_exposure_usd']:>8,.2f} {s['drift_pct']:>+7.1f}% "
+            f"${s['pnl_usd']:>+8,.2f} {s['pnl_pct_of_capital']:>+6.2f}%"
+        )
 
 
 def main():
     ap = argparse.ArgumentParser(description="Hermes NAV accounting CLI")
     ap.add_argument("--show", action="store_true", help="Print current NAV per fund")
-    ap.add_argument("--statement", type=str, default=None,
-                    help="Generate statement for period (YYYY-MM, YYYY-Qn, or YYYY)")
-    ap.add_argument("--fund", type=str, default=None,
-                    help="Restrict to one fund_id (default: all)")
-    ap.add_argument("--crystallize-mgmt", action="store_true",
-                    help="Crystallize management fees (moves accrued -> paid)")
-    ap.add_argument("--crystallize-perf", action="store_true",
-                    help="Crystallize performance fees (moves accrued -> paid, resets HWM)")
-    ap.add_argument("--json", action="store_true",
-                    help="Emit JSON instead of human-readable text")
+    ap.add_argument(
+        "--statement",
+        type=str,
+        default=None,
+        help="Generate statement for period (YYYY-MM, YYYY-Qn, or YYYY)",
+    )
+    ap.add_argument("--fund", type=str, default=None, help="Restrict to one fund_id (default: all)")
+    ap.add_argument(
+        "--crystallize-mgmt",
+        action="store_true",
+        help="Crystallize management fees (moves accrued -> paid)",
+    )
+    ap.add_argument(
+        "--crystallize-perf",
+        action="store_true",
+        help="Crystallize performance fees (moves accrued -> paid, resets HWM)",
+    )
+    ap.add_argument("--json", action="store_true", help="Emit JSON instead of human-readable text")
     args = ap.parse_args()
 
     policy = _load_json(POLICY_FILE, {})
@@ -471,8 +526,9 @@ def main():
             print(json.dumps(out, indent=2))
         return
 
-    if args.show or (not args.statement and not args.crystallize_mgmt
-                    and not args.crystallize_perf):
+    if args.show or (
+        not args.statement and not args.crystallize_mgmt and not args.crystallize_perf
+    ):
         snaps = []
         for fid in fund_ids:
             snap = compute_nav(fid, policy, summary, ledger)

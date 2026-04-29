@@ -25,7 +25,9 @@ Scan-only mode:
 
 Paper only. No real tx. No exchange keys. R-001 compliant (free Binance public).
 """
+
 from __future__ import annotations
+
 import argparse
 import json
 import logging
@@ -33,11 +35,11 @@ import math
 import os
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
-from policy import sleeve_targets_for, worker_cfg
+from engine.policy import sleeve_targets_for, worker_cfg
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -72,12 +74,13 @@ UA = {"User-Agent": "hermes-delta-neutral/1.0"}
 class FundingOpp(NamedTuple):
     symbol: str
     mark_price: float
-    funding_rate: float          # per-cycle (8h)
-    annualized_pct: float        # rate * 3 * 365 * 100
+    funding_rate: float  # per-cycle (8h)
+    annualized_pct: float  # rate * 3 * 365 * 100
     next_funding_time_ms: int
 
 
 # ---------- fetch ----------
+
 
 def fetch_binance_funding() -> list[FundingOpp]:
     try:
@@ -107,6 +110,7 @@ def rank_opps(opps: list[FundingOpp], min_rate: float) -> list[FundingOpp]:
 
 
 # ---------- state ----------
+
 
 def load_state() -> dict:
     if STATE_FILE.exists():
@@ -143,10 +147,16 @@ def check_same_sign_history(state: dict, symbol: str, cur_rate: float) -> bool:
 
 # ---------- portfolio ----------
 
+
 def load_portfolio() -> dict:
     if not PORTFOLIO_FILE.exists():
-        return {"positions": [], "realized_pnl": 0.0, "total_trades": 0,
-                "correct_trades": 0, "starting_capital": 10000.0}
+        return {
+            "positions": [],
+            "realized_pnl": 0.0,
+            "total_trades": 0,
+            "correct_trades": 0,
+            "starting_capital": 10000.0,
+        }
     try:
         return json.loads(PORTFOLIO_FILE.read_text())
     except Exception:
@@ -251,9 +261,15 @@ def resolve_position(pos: dict, reason: str) -> None:
 
 # ---------- per-sleeve fill ----------
 
-def fill_sleeve(pf: dict, state: dict, ranked: list[FundingOpp],
-                by_symbol: dict[str, FundingOpp], sleeve_id: str,
-                target_usd: float) -> tuple[list[dict], int, int]:
+
+def fill_sleeve(
+    pf: dict,
+    state: dict,
+    ranked: list[FundingOpp],
+    by_symbol: dict[str, FundingOpp],
+    sleeve_id: str,
+    target_usd: float,
+) -> tuple[list[dict], int, int]:
     """Run accrual + resolve + open for one sleeve. Returns (open_positions, opened, resolved)."""
     open_dn = positions_for_sleeve(pf, sleeve_id)
     resolved_count = 0
@@ -263,8 +279,12 @@ def fill_sleeve(pf: dict, state: dict, ranked: list[FundingOpp],
         if result == "flip":
             resolve_position(pos, "funding_sign_flipped")
             resolved_count += 1
-            logger.info("delta_neutral[%s]: resolved %s on sign flip, pnl=%.6f",
-                        sleeve_id, pos.get("symbol"), pos.get("pnl_usd", 0))
+            logger.info(
+                "delta_neutral[%s]: resolved %s on sign flip, pnl=%.6f",
+                sleeve_id,
+                pos.get("symbol"),
+                pos.get("pnl_usd", 0),
+            )
 
     open_dn = positions_for_sleeve(pf, sleeve_id)
     deployed = sum(p.get("notional_usd", p.get("size_usd", 0)) for p in open_dn)
@@ -279,7 +299,9 @@ def fill_sleeve(pf: dict, state: dict, ranked: list[FundingOpp],
             break
         if opp.symbol in have_symbols:
             continue
-        if not PAPER_MODE_RELAXED_GATE and not check_same_sign_history(state, opp.symbol, opp.funding_rate):
+        if not PAPER_MODE_RELAXED_GATE and not check_same_sign_history(
+            state, opp.symbol, opp.funding_rate
+        ):
             continue
         size = min(MAX_POSITION_USD, target_usd - deployed)
         if size < 1.0:
@@ -289,17 +311,28 @@ def fill_sleeve(pf: dict, state: dict, ranked: list[FundingOpp],
         have_symbols.add(opp.symbol)
         deployed += size
         opened += 1
-        logger.info("delta_neutral[%s]: opened %s size=$%.2f entry_apy=%.2f%%",
-                    sleeve_id, opp.symbol, size, opp.annualized_pct)
+        logger.info(
+            "delta_neutral[%s]: opened %s size=$%.2f entry_apy=%.2f%%",
+            sleeve_id,
+            opp.symbol,
+            size,
+            opp.annualized_pct,
+        )
     return open_dn, opened, resolved_count
 
 
 # ---------- status ----------
 
-def write_status(per_sleeve: dict[str, list[dict]], opps: list[FundingOpp],
-                 qualifying: int, ok: bool, error_msg: str | None = None) -> None:
+
+def write_status(
+    per_sleeve: dict[str, list[dict]],
+    opps: list[FundingOpp],
+    qualifying: int,
+    ok: bool,
+    error_msg: str | None = None,
+) -> None:
     STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    now_iso = datetime.now(timezone.utc).astimezone().isoformat()
+    now_iso = datetime.now(UTC).astimezone().isoformat()
     all_open = [p for ps in per_sleeve.values() for p in ps]
     total_deployed = sum(p.get("notional_usd", p.get("size_usd", 0)) for p in all_open)
     total_pnl = sum(p.get("pnl_usd", 0) for p in all_open)
@@ -360,12 +393,18 @@ def write_status(per_sleeve: dict[str, list[dict]], opps: list[FundingOpp],
 
 # ---------- modes ----------
 
+
 def run_once() -> None:
     state = load_state()
     opps = fetch_binance_funding()
     if not opps:
-        write_status({sid: [] for sid in SLEEVE_TARGETS}, [], 0,
-                     ok=False, error_msg="binance fetch returned no data")
+        write_status(
+            {sid: [] for sid in SLEEVE_TARGETS},
+            [],
+            0,
+            ok=False,
+            error_msg="binance fetch returned no data",
+        )
         logger.warning("delta_neutral: no funding data")
         return
 
@@ -393,10 +432,12 @@ def run_once() -> None:
     all_open = [p for ps in per_sleeve.values() for p in ps]
     total_deployed = sum(p.get("notional_usd", p.get("size_usd", 0)) for p in all_open)
     total_pnl = sum(p.get("pnl_usd", 0) for p in all_open)
-    print(f"[delta_neutral] sleeves={len(per_sleeve)} open={len(all_open)} "
-          f"deployed=${total_deployed:.2f} cum_funding=${total_pnl:.6f} "
-          f"opened={total_opened} resolved={total_resolved} "
-          f"universe={len(opps)} qualifying={len(ranked)}")
+    print(
+        f"[delta_neutral] sleeves={len(per_sleeve)} open={len(all_open)} "
+        f"deployed=${total_deployed:.2f} cum_funding=${total_pnl:.6f} "
+        f"opened={total_opened} resolved={total_resolved} "
+        f"universe={len(opps)} qualifying={len(ranked)}"
+    )
 
 
 def scan(min_rate: float) -> None:
@@ -409,7 +450,7 @@ def scan(min_rate: float) -> None:
     ranked = rank_opps(opps, min_rate)
     qualified = [(o, check_same_sign_history(state, o.symbol, o.funding_rate)) for o in ranked[:20]]
 
-    print(f"\n=== Delta-Neutral Funding Scan ===")
+    print("\n=== Delta-Neutral Funding Scan ===")
     print(f"Universe: {len(opps)} Binance perps | min rate: {min_rate}% annualized")
     print(f"Qualifying: {len(ranked)} | same-sign history required: {MIN_FUNDING_HISTORY_HOURS}h")
     print(f"Sleeve targets: {SLEEVE_TARGETS}")
@@ -418,7 +459,9 @@ def scan(min_rate: float) -> None:
     for o, ss in qualified[:15]:
         action = "LONG SPOT + SHORT PERP" if o.annualized_pct > 0 else "SHORT SPOT + LONG PERP"
         gate = "OK" if ss else "wait"
-        print(f"{o.symbol:<14} {o.annualized_pct:>+8.2f} {o.funding_rate:>+10.6f} {o.mark_price:>14.4f} {gate:>6} {action:<26}")
+        print(
+            f"{o.symbol:<14} {o.annualized_pct:>+8.2f} {o.funding_rate:>+10.6f} {o.mark_price:>14.4f} {gate:>6} {action:<26}"
+        )
 
     state["last_scan"] = int(time.time())
     save_state(state)
@@ -427,8 +470,12 @@ def scan(min_rate: float) -> None:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scan", action="store_true", help="Scan mode (read-only)")
-    ap.add_argument("--min-rate", type=float, default=MIN_ANNUALIZED_RATE,
-                    help="Minimum annualized funding rate (percent)")
+    ap.add_argument(
+        "--min-rate",
+        type=float,
+        default=MIN_ANNUALIZED_RATE,
+        help="Minimum annualized funding rate (percent)",
+    )
     args = ap.parse_args()
     if args.scan:
         scan(args.min_rate)

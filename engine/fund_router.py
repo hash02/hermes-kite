@@ -19,14 +19,16 @@ Reads:
     ~/.hermes/brain/paper_portfolio.json
     config/policy.json (via funds/policy.py; falls back to built-in defaults)
 """
+
 from __future__ import annotations
+
 import argparse
 import json
 import time
 from collections import defaultdict
 from pathlib import Path
 
-from policy import fund_router_config
+from engine.policy import fund_router_config
 
 HOME = Path.home()
 PORTFOLIO = HOME / ".hermes" / "brain" / "paper_portfolio.json"
@@ -42,10 +44,13 @@ _FALLBACK_FUND_CONFIG = {
         "max_drawdown_pct": 5.0,
         "payout_cadence": "monthly",
         "sleeves": {
-            "stablecoin_yield":    {"target_pct": 40, "workers": ["aave_usdc", "morpho_usdc", "euler_pyusd"]},
-            "delta_neutral":       {"target_pct": 25, "workers": ["delta_neutral_funding"]},
-            "structural_grid":     {"target_pct": 25, "workers": ["grid_eth_usdc", "grid_stables"]},
-            "cash":                {"target_pct": 10, "workers": []},
+            "stablecoin_yield": {
+                "target_pct": 40,
+                "workers": ["aave_usdc", "morpho_usdc", "euler_pyusd"],
+            },
+            "delta_neutral": {"target_pct": 25, "workers": ["delta_neutral_funding"]},
+            "structural_grid": {"target_pct": 25, "workers": ["grid_eth_usdc", "grid_stables"]},
+            "cash": {"target_pct": 10, "workers": []},
         },
     },
     "fund_75_25_balanced": {
@@ -54,12 +59,18 @@ _FALLBACK_FUND_CONFIG = {
         "max_drawdown_pct": 10.0,
         "payout_cadence": "quarterly",
         "sleeves": {
-            "stablecoin_yield":    {"target_pct": 25, "workers": ["aave_usdc", "sgho", "superstate_uscc"]},
-            "delta_neutral":       {"target_pct": 20, "workers": ["delta_neutral_funding"]},
-            "structural_grid":     {"target_pct": 25, "workers": ["grid_eth_usdc", "grid_btc_usdc"]},
-            "directional":         {"target_pct": 20, "workers": ["pyth_momentum", "polymarket_btc_updown"]},
-            "tokenized_stocks":    {"target_pct": 5,  "workers": ["xstocks_grid"]},
-            "cash":                {"target_pct": 5,  "workers": []},
+            "stablecoin_yield": {
+                "target_pct": 25,
+                "workers": ["aave_usdc", "sgho", "superstate_uscc"],
+            },
+            "delta_neutral": {"target_pct": 20, "workers": ["delta_neutral_funding"]},
+            "structural_grid": {"target_pct": 25, "workers": ["grid_eth_usdc", "grid_btc_usdc"]},
+            "directional": {
+                "target_pct": 20,
+                "workers": ["pyth_momentum", "polymarket_btc_updown"],
+            },
+            "tokenized_stocks": {"target_pct": 5, "workers": ["xstocks_grid"]},
+            "cash": {"target_pct": 5, "workers": []},
         },
     },
     "fund_90_10_growth": {
@@ -68,11 +79,17 @@ _FALLBACK_FUND_CONFIG = {
         "max_drawdown_pct": 25.0,
         "payout_cadence": "annual",
         "sleeves": {
-            "stablecoin_floor":    {"target_pct": 10, "workers": ["aave_usdc", "sgho"]},
-            "latency_arb":         {"target_pct": 30, "workers": ["polymarket_btc_updown"]},
-            "aggressive_grid":     {"target_pct": 20, "workers": ["grid_eth_usdc", "grid_btc_usdc", "grid_sol"]},
-            "directional_momentum":{"target_pct": 20, "workers": ["tv_momentum"]},
-            "memecoin_sniper":     {"target_pct": 10, "workers": ["crypto_memecoins", "wow_sniper_base"]},
+            "stablecoin_floor": {"target_pct": 10, "workers": ["aave_usdc", "sgho"]},
+            "latency_arb": {"target_pct": 30, "workers": ["polymarket_btc_updown"]},
+            "aggressive_grid": {
+                "target_pct": 20,
+                "workers": ["grid_eth_usdc", "grid_btc_usdc", "grid_sol"],
+            },
+            "directional_momentum": {"target_pct": 20, "workers": ["tv_momentum"]},
+            "memecoin_sniper": {
+                "target_pct": 10,
+                "workers": ["crypto_memecoins", "wow_sniper_base"],
+            },
             "xstocks_directional": {"target_pct": 10, "workers": ["xstocks_directional"]},
         },
     },
@@ -98,10 +115,16 @@ def compute_fund_status(fund_id: str, fund_cfg: dict, positions: list, capital: 
         for w in sleeve["workers"]:
             worker_to_sleeve[w] = sleeve_id
 
-    sleeve_agg = defaultdict(lambda: {
-        "positions": 0, "resolved": 0, "wins": 0,
-        "pnl_usd": 0.0, "staked_usd": 0.0, "open_exposure_usd": 0.0,
-    })
+    sleeve_agg = defaultdict(
+        lambda: {
+            "positions": 0,
+            "resolved": 0,
+            "wins": 0,
+            "pnl_usd": 0.0,
+            "staked_usd": 0.0,
+            "open_exposure_usd": 0.0,
+        }
+    )
 
     for p in positions:
         w = p.get("worker", "")
@@ -183,7 +206,9 @@ def compute_fund_status(fund_id: str, fund_cfg: dict, positions: list, capital: 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--capital", type=float, default=1000.0, help="Assumed per-fund capital (paper)")
+    ap.add_argument(
+        "--capital", type=float, default=1000.0, help="Assumed per-fund capital (paper)"
+    )
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -199,12 +224,18 @@ def main():
         if args.verbose:
             print(f"\n=== {status['name']} ===")
             print(f"  coverage: {status['coverage_pct']}% of sleeves funded")
-            print(f"  trades: {status['total_trades']}  resolved: {status['total_resolved']}  WR: {status['overall_win_rate_pct']}%  PnL: ${status['total_pnl_usd']:+.2f}")
+            print(
+                f"  trades: {status['total_trades']}  resolved: {status['total_resolved']}  WR: {status['overall_win_rate_pct']}%  PnL: ${status['total_pnl_usd']:+.2f}"
+            )
             for sid, s in status["sleeves"].items():
                 marker = " " if s["funded"] else "!"
-                print(f"  {marker} {sid:22s} tgt {s['target_pct']:>2}% (${s['target_usd']:.0f})  live ${s['open_exposure_usd']:.2f}  drift {s['drift_pct']:+.1f}%  trades {s['positions_total']}  PnL ${s['pnl_usd']:+.2f}")
+                print(
+                    f"  {marker} {sid:22s} tgt {s['target_pct']:>2}% (${s['target_usd']:.0f})  live ${s['open_exposure_usd']:.2f}  drift {s['drift_pct']:+.1f}%  trades {s['positions_total']}  PnL ${s['pnl_usd']:+.2f}"
+                )
         else:
-            print(f"  wrote {out.name}  coverage={status['coverage_pct']}%  PnL=${status['total_pnl_usd']:+.2f}")
+            print(
+                f"  wrote {out.name}  coverage={status['coverage_pct']}%  PnL=${status['total_pnl_usd']:+.2f}"
+            )
 
 
 if __name__ == "__main__":

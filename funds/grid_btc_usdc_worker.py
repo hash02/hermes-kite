@@ -6,9 +6,11 @@ Covers structural_grid (75/25) + aggressive_grid (90/10). Thin config on
 grid_base.py. Sleeve sizes + grid band come from config/policy.json;
 fallback defaults below.
 """
+
 from __future__ import annotations
-from grid_base import GridConfig, run_grid
-from policy import sleeve_targets_for, worker_cfg
+
+from engine.grid_base import GridConfig, run_grid
+from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "grid_btc_usdc"
 

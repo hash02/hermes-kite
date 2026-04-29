@@ -18,16 +18,18 @@ Exit: -25% stop, OR 24h change <= -10%, OR pair age > 60 days (thesis stale).
 Data: https://api.dexscreener.com/latest/dex/search?q=chain:base
 (free, no key; rate-limited to ~300 req/min).
 """
+
 from __future__ import annotations
+
 import json
 import logging
 import os
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from policy import sleeve_targets_for, worker_cfg
+from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "wow_sniper_base"
 HERMES = Path.home() / ".hermes" / "brain"
@@ -78,17 +80,19 @@ def fetch_base_pairs() -> list[dict]:
             chg24 = float((p.get("priceChange") or {}).get("h24") or 0)
             buy24 = float((p.get("volume") or {}).get("h24") or 0)
             price_usd = float(p.get("priceUsd") or 0)
-            out.append({
-                "pair_address": p.get("pairAddress"),
-                "base_symbol": (p.get("baseToken") or {}).get("symbol", ""),
-                "base_address": (p.get("baseToken") or {}).get("address", ""),
-                "price_usd": price_usd,
-                "age_days": age_days,
-                "fdv_usd": fdv,
-                "change_24h_pct": chg24,
-                "volume_24h_usd": buy24,
-                "url": p.get("url", ""),
-            })
+            out.append(
+                {
+                    "pair_address": p.get("pairAddress"),
+                    "base_symbol": (p.get("baseToken") or {}).get("symbol", ""),
+                    "base_address": (p.get("baseToken") or {}).get("address", ""),
+                    "price_usd": price_usd,
+                    "age_days": age_days,
+                    "fdv_usd": fdv,
+                    "change_24h_pct": chg24,
+                    "volume_24h_usd": buy24,
+                    "url": p.get("url", ""),
+                }
+            )
         except (KeyError, TypeError, ValueError):
             continue
     return out
@@ -167,7 +171,7 @@ def fetch_current_price(base_address: str) -> tuple[float | None, float | None]:
 def run_once():
     portfolio = load_json(PORTFOLIO_FILE, {"positions": []})
     positions = portfolio.get("positions", []) if isinstance(portfolio, dict) else portfolio
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
     universe = fetch_base_pairs()
     cands = qualifying(universe)
@@ -194,8 +198,10 @@ def run_once():
             pos["current_change_24h_pct"] = chg24
             pnl_pct = ((price - entry) / entry) * 100.0 if entry else 0.0
 
-            age_days = pos.get("age_days_at_entry", 0) + \
-                       (time.time() - pos.get("entry_ts", time.time())) / 86400
+            age_days = (
+                pos.get("age_days_at_entry", 0)
+                + (time.time() - pos.get("entry_ts", time.time())) / 86400
+            )
             if chg24 is not None and chg24 <= EXIT_24H_PCT:
                 pos["resolved"] = True
                 pos["resolve_reason"] = f"fade_24h={chg24:.2f}%"
@@ -253,47 +259,58 @@ def run_once():
     else:
         save_json_atomic(PORTFOLIO_FILE, positions)
 
-    all_open = [p for p in positions if isinstance(p, dict)
-                and p.get("worker") == WORKER_NAME and not p.get("resolved")]
+    all_open = [
+        p
+        for p in positions
+        if isinstance(p, dict) and p.get("worker") == WORKER_NAME and not p.get("resolved")
+    ]
     deployed = sum(p.get("size_usd", 0) for p in all_open)
     unrealized = sum(p.get("pnl_usd", 0) for p in all_open)
 
-    save_json_atomic(STATUS_FILE, {
-        "worker_name": WORKER_NAME,
-        "strategy_type": "base_new_token_sniper",
-        "status": "active" if all_open else "scanning",
-        "last_heartbeat": datetime.now().astimezone().isoformat(),
-        "position_summary": {
-            "open_positions": len(all_open),
-            "total_capital_deployed_usd": round(deployed, 4),
-            "unrealized_pnl_usd": round(unrealized, 4),
+    save_json_atomic(
+        STATUS_FILE,
+        {
+            "worker_name": WORKER_NAME,
+            "strategy_type": "base_new_token_sniper",
+            "status": "active" if all_open else "scanning",
+            "last_heartbeat": datetime.now().astimezone().isoformat(),
+            "position_summary": {
+                "open_positions": len(all_open),
+                "total_capital_deployed_usd": round(deployed, 4),
+                "unrealized_pnl_usd": round(unrealized, 4),
+            },
+            "this_cycle": {
+                "opened": opened,
+                "resolved": resolved,
+                "universe_size": len(universe),
+                "qualifying": len(cands),
+            },
+            "risk": {
+                "position_sizing_method": "even_slot",
+                "sleeve_targets_usd": SLEEVE_TARGETS,
+                "max_open_positions": MAX_OPEN_POSITIONS,
+                "entry_24h_pct": ENTRY_24H_PCT,
+                "exit_24h_pct": EXIT_24H_PCT,
+                "stop_loss_pct": STOP_LOSS_PCT,
+                "max_pair_age_days": MAX_PAIR_AGE_DAYS,
+                "max_fdv_usd": MAX_FDV_USD,
+                "min_24h_buy_vol_usd": MIN_24H_BUY_VOL_USD,
+            },
+            "strategy_config": {
+                "chain": "base",
+                "source": "dexscreener_public",
+                "fund_sleeves": list(SLEEVE_TARGETS.keys()),
+            },
+            "errors_last_24h": 0,
+            "health_check": "green",
         },
-        "this_cycle": {"opened": opened, "resolved": resolved,
-                       "universe_size": len(universe),
-                       "qualifying": len(cands)},
-        "risk": {
-            "position_sizing_method": "even_slot",
-            "sleeve_targets_usd": SLEEVE_TARGETS,
-            "max_open_positions": MAX_OPEN_POSITIONS,
-            "entry_24h_pct": ENTRY_24H_PCT,
-            "exit_24h_pct": EXIT_24H_PCT,
-            "stop_loss_pct": STOP_LOSS_PCT,
-            "max_pair_age_days": MAX_PAIR_AGE_DAYS,
-            "max_fdv_usd": MAX_FDV_USD,
-            "min_24h_buy_vol_usd": MIN_24H_BUY_VOL_USD,
-        },
-        "strategy_config": {
-            "chain": "base",
-            "source": "dexscreener_public",
-            "fund_sleeves": list(SLEEVE_TARGETS.keys()),
-        },
-        "errors_last_24h": 0,
-        "health_check": "green",
-    })
+    )
 
-    print(f"[{WORKER_NAME}] open={len(all_open)} deployed=${deployed:.2f} "
-          f"unrealized=${unrealized:.4f} opened={opened} resolved={resolved} "
-          f"universe={len(universe)} qualifying={len(cands)}")
+    print(
+        f"[{WORKER_NAME}] open={len(all_open)} deployed=${deployed:.2f} "
+        f"unrealized=${unrealized:.4f} opened={opened} resolved={resolved} "
+        f"universe={len(universe)} qualifying={len(cands)}"
+    )
 
 
 if __name__ == "__main__":

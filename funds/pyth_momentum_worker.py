@@ -20,18 +20,19 @@ Data source: https://hermes.pyth.network/api/latest_price_feeds
 Historical EMA is computed from Pyth's benchmarks endpoint:
   https://benchmarks.pyth.network/v1/shims/tradingview/history
 """
+
 from __future__ import annotations
+
 import json
 import logging
-import math
 import os
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from policy import sleeve_targets_for, worker_cfg
+from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "pyth_momentum"
 
@@ -42,10 +43,26 @@ STATE_FILE = HERMES / "state" / f"{WORKER_NAME}_state.json"
 
 # Pyth price feed IDs (see https://pyth.network/developers/price-feed-ids)
 UNIVERSE = [
-    {"symbol": "BTC", "feed_id": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43", "tv": "Crypto.BTC/USD"},
-    {"symbol": "ETH", "feed_id": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace", "tv": "Crypto.ETH/USD"},
-    {"symbol": "SOL", "feed_id": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d", "tv": "Crypto.SOL/USD"},
-    {"symbol": "LINK", "feed_id": "8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221", "tv": "Crypto.LINK/USD"},
+    {
+        "symbol": "BTC",
+        "feed_id": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+        "tv": "Crypto.BTC/USD",
+    },
+    {
+        "symbol": "ETH",
+        "feed_id": "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace",
+        "tv": "Crypto.ETH/USD",
+    },
+    {
+        "symbol": "SOL",
+        "feed_id": "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d",
+        "tv": "Crypto.SOL/USD",
+    },
+    {
+        "symbol": "LINK",
+        "feed_id": "8ac0c70fff57e9aefdf5edf44b51d62c2d433653cbb2cf5cc06bb115af04d221",
+        "tv": "Crypto.LINK/USD",
+    },
 ]
 
 _FALLBACK_TARGETS = {"fund_75_25_balanced.directional": 100.00}
@@ -91,7 +108,7 @@ def fetch_latest_prices() -> dict[str, float]:
         try:
             mantissa = int(price_obj["price"])
             expo = int(price_obj["expo"])
-            out[by_id[fid]] = mantissa * (10 ** expo)
+            out[by_id[fid]] = mantissa * (10**expo)
         except (KeyError, ValueError):
             continue
     return out
@@ -159,18 +176,21 @@ def positions_for_sleeve(positions, sleeve_id, open_only=True):
 def run_once():
     portfolio = load_json(PORTFOLIO_FILE, {"positions": []})
     positions = portfolio.get("positions", []) if isinstance(portfolio, dict) else portfolio
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
     marks = fetch_latest_prices()
     if not marks:
         log.warning("no pyth prices; skipping cycle")
-        save_json_atomic(STATUS_FILE, {
-            "worker_name": WORKER_NAME,
-            "status": "degraded",
-            "last_heartbeat": now_iso,
-            "errors_last_24h": 1,
-            "last_error": "hermes latest_price_feeds returned empty",
-        })
+        save_json_atomic(
+            STATUS_FILE,
+            {
+                "worker_name": WORKER_NAME,
+                "status": "degraded",
+                "last_heartbeat": now_iso,
+                "errors_last_24h": 1,
+                "last_error": "hermes latest_price_feeds returned empty",
+            },
+        )
         return
 
     opened = 0
@@ -255,40 +275,47 @@ def run_once():
     else:
         save_json_atomic(PORTFOLIO_FILE, positions)
 
-    all_open = [p for p in positions if isinstance(p, dict)
-                and p.get("worker") == WORKER_NAME and not p.get("resolved")]
+    all_open = [
+        p
+        for p in positions
+        if isinstance(p, dict) and p.get("worker") == WORKER_NAME and not p.get("resolved")
+    ]
     deployed = sum(p.get("size_usd", 0) for p in all_open)
 
-    save_json_atomic(STATUS_FILE, {
-        "worker_name": WORKER_NAME,
-        "strategy_type": "momentum",
-        "status": "active" if all_open else "scanning",
-        "last_heartbeat": datetime.now().astimezone().isoformat(),
-        "position_summary": {
-            "open_positions": len(all_open),
-            "total_capital_deployed_usd": round(deployed, 4),
+    save_json_atomic(
+        STATUS_FILE,
+        {
+            "worker_name": WORKER_NAME,
+            "strategy_type": "momentum",
+            "status": "active" if all_open else "scanning",
+            "last_heartbeat": datetime.now().astimezone().isoformat(),
+            "position_summary": {
+                "open_positions": len(all_open),
+                "total_capital_deployed_usd": round(deployed, 4),
+            },
+            "this_cycle": {"opened": opened, "resolved": resolved, "universe_size": len(UNIVERSE)},
+            "risk": {
+                "position_sizing_method": "per_sleeve_even_weight",
+                "sleeve_targets_usd": SLEEVE_TARGETS,
+                "fast_ema_minutes": FAST_EMA_MINUTES,
+                "slow_ema_minutes": SLOW_EMA_MINUTES,
+                "entry_gap_pct": ENTRY_GAP_PCT,
+                "stop_loss_pct": STOP_LOSS_PCT,
+                "counterparty": "pyth_oracle_network",
+            },
+            "strategy_config": {
+                "source": "pyth_hermes_public",
+                "fund_sleeves": list(SLEEVE_TARGETS.keys()),
+            },
+            "errors_last_24h": 0,
+            "health_check": "green",
         },
-        "this_cycle": {"opened": opened, "resolved": resolved,
-                       "universe_size": len(UNIVERSE)},
-        "risk": {
-            "position_sizing_method": "per_sleeve_even_weight",
-            "sleeve_targets_usd": SLEEVE_TARGETS,
-            "fast_ema_minutes": FAST_EMA_MINUTES,
-            "slow_ema_minutes": SLOW_EMA_MINUTES,
-            "entry_gap_pct": ENTRY_GAP_PCT,
-            "stop_loss_pct": STOP_LOSS_PCT,
-            "counterparty": "pyth_oracle_network",
-        },
-        "strategy_config": {
-            "source": "pyth_hermes_public",
-            "fund_sleeves": list(SLEEVE_TARGETS.keys()),
-        },
-        "errors_last_24h": 0,
-        "health_check": "green",
-    })
+    )
 
-    print(f"[{WORKER_NAME}] sleeves={len(SLEEVE_TARGETS)} open={len(all_open)} "
-          f"deployed=${deployed:.2f} opened={opened} resolved={resolved}")
+    print(
+        f"[{WORKER_NAME}] sleeves={len(SLEEVE_TARGETS)} open={len(all_open)} "
+        f"deployed=${deployed:.2f} opened={opened} resolved={resolved}"
+    )
 
 
 if __name__ == "__main__":

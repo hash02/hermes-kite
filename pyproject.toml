@@ -1,0 +1,101 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hermes-kite"
+version = "0.2.0"
+description = "Autonomous portfolio manager — paper-trading workers + risk engine + NAV accounting + on-chain settlement on Kite testnet."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "hash02" }]
+keywords = ["trading", "defi", "kite", "portfolio", "paper-trading"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "web3==6.20.0",
+    "requests>=2.31",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "coverage>=7.5",
+    "pre-commit>=3.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/hash02/hermes-kite"
+Repository = "https://github.com/hash02/hermes-kite"
+
+[tool.setuptools.packages.find]
+include = ["engine*", "funds*"]
+exclude = ["tests*", "scripts*", "onchain*"]
+
+# ---------- Ruff (lint + format) ----------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["__pycache__", ".venv", "exports", "logs"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "W",   # pycodestyle warnings
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long — handled by formatter
+    "B008",  # mutable default args (we don't use this pattern)
+    "SIM108", # ternary preference — readability often loses
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]   # allow assert False patterns in tests
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------- Mypy ----------
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true   # web3 stubs are flaky; fine for now
+disallow_untyped_defs = false   # too aggressive for the worker fleet
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = "engine.*"
+disallow_untyped_defs = false   # gradually tighten; relaxed for first pass
+warn_unused_ignores = true
+
+# ---------- Coverage ----------
+[tool.coverage.run]
+source = ["engine", "funds", "scripts"]
+branch = true
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+precision = 1
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

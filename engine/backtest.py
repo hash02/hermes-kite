@@ -27,24 +27,23 @@ CLI:
   python3 funds/backtest.py --output-dir exports/bt_2026-04-23
   python3 funds/backtest.py --seed 42
 """
+
 from __future__ import annotations
+
 import argparse
 import copy
 import json
 import math
 import random
 import statistics
-import sys
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT / "funds"))
+from engine import policy, risk_engine
 
-import policy  # noqa: E402
-import risk_engine  # noqa: E402
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 DEFAULT_OUTPUT = REPO_ROOT / "exports"
 TRADING_DAYS_PER_YEAR = 252
@@ -54,21 +53,22 @@ TRADING_DAYS_PER_YEAR = 252
 # risk_engine._BOOTSTRAP_VOL_PCT for consistency. Mu is a pragmatic default
 # calibrated to the strategy's stated thesis.
 STRATEGY_STATS = {
-    "yield":           {"mu": 4.0,  "sigma": 1.0},
-    "delta_neutral":   {"mu": 8.0,  "sigma": 3.0},
-    "grid":            {"mu": 12.0, "sigma": 8.0},
-    "grid_stables":    {"mu": 3.0,  "sigma": 0.5},
-    "directional":     {"mu": 15.0, "sigma": 25.0},
-    "momentum":        {"mu": 15.0, "sigma": 25.0},
-    "binary":          {"mu": 5.0,  "sigma": 40.0},
+    "yield": {"mu": 4.0, "sigma": 1.0},
+    "delta_neutral": {"mu": 8.0, "sigma": 3.0},
+    "grid": {"mu": 12.0, "sigma": 8.0},
+    "grid_stables": {"mu": 3.0, "sigma": 0.5},
+    "directional": {"mu": 15.0, "sigma": 25.0},
+    "momentum": {"mu": 15.0, "sigma": 25.0},
+    "binary": {"mu": 5.0, "sigma": 40.0},
     "tokenized_stock": {"mu": 10.0, "sigma": 20.0},
-    "memecoin":        {"mu": 30.0, "sigma": 80.0},
-    "sniper":          {"mu": 50.0, "sigma": 120.0},
-    "default":         {"mu": 10.0, "sigma": 15.0},
+    "memecoin": {"mu": 30.0, "sigma": 80.0},
+    "sniper": {"mu": 50.0, "sigma": 120.0},
+    "default": {"mu": 10.0, "sigma": 15.0},
 }
 
 
 # ---------- helpers ----------
+
 
 def _category(worker_name: str) -> str:
     return risk_engine._WORKER_META.get(worker_name, {}).get("category", "default")
@@ -110,18 +110,21 @@ def _collect_legs(policy_snapshot: dict, fund_filter: str | None = None) -> list
                 )
                 if principal <= 0:
                     continue
-                out.append(SleeveLeg(
-                    fund_id=fund_id,
-                    sleeve_short=sleeve_short,
-                    worker=wname,
-                    static_usd=float(principal),
-                    category=_category(wname),
-                    counterparty=_counterparty(wname),
-                ))
+                out.append(
+                    SleeveLeg(
+                        fund_id=fund_id,
+                        sleeve_short=sleeve_short,
+                        worker=wname,
+                        static_usd=float(principal),
+                        category=_category(wname),
+                        counterparty=_counterparty(wname),
+                    )
+                )
     return out
 
 
 # ---------- metrics ----------
+
 
 def _max_drawdown_pct(equity: list[float]) -> float:
     peak = equity[0]
@@ -198,6 +201,7 @@ def _compute_metrics(equity: list[float], daily_returns: list[float], days: int)
 
 # ---------- engine-aware sizing per day ----------
 
+
 def _counterparty_exposure_from_sizes(fund_id: str, sizes: dict, capital: float) -> dict:
     """sizes: {(fund_id, sleeve_short, worker): usd}. Return {cp: pct_of_capital}."""
     out = defaultdict(float)
@@ -211,8 +215,9 @@ def _counterparty_exposure_from_sizes(fund_id: str, sizes: dict, capital: float)
     return dict(out)
 
 
-def _size_for_day(leg: SleeveLeg, cum_fund_pnl: float, policy_snapshot: dict,
-                  cp_exposure: dict) -> float:
+def _size_for_day(
+    leg: SleeveLeg, cum_fund_pnl: float, policy_snapshot: dict, cp_exposure: dict
+) -> float:
     """Return engine-adjusted USD for one sleeve-leg on a given day."""
     risk = policy_snapshot.get("risk", {})
     if not risk.get("engine_enabled"):
@@ -248,15 +253,18 @@ def _size_for_day(leg: SleeveLeg, cum_fund_pnl: float, policy_snapshot: dict,
 
 # ---------- single MC path ----------
 
-def _simulate_one(policy_snapshot: dict, legs: list[SleeveLeg], days: int,
-                  rng: random.Random) -> dict:
+
+def _simulate_one(
+    policy_snapshot: dict, legs: list[SleeveLeg], days: int, rng: random.Random
+) -> dict:
     """Run one Monte Carlo path across all funds. Return {fund_id: metrics}."""
     # Pre-compute the static counterparty exposure (used when engine off).
-    static_sizes = {(leg.fund_id, leg.sleeve_short, leg.worker): leg.static_usd
-                    for leg in legs}
+    static_sizes = {(leg.fund_id, leg.sleeve_short, leg.worker): leg.static_usd for leg in legs}
 
-    fund_capitals = {fid: float(f.get("capital_usd", 1000.0))
-                     for fid, f in policy_snapshot.get("funds", {}).items()}
+    fund_capitals = {
+        fid: float(f.get("capital_usd", 1000.0))
+        for fid, f in policy_snapshot.get("funds", {}).items()
+    }
 
     fund_equity = {fid: [cap] for fid, cap in fund_capitals.items()}
     fund_daily_rets = {fid: [] for fid in fund_capitals}
@@ -282,7 +290,9 @@ def _simulate_one(policy_snapshot: dict, legs: list[SleeveLeg], days: int,
         }
         for leg in legs:
             sz = _size_for_day(
-                leg, fund_cum_pnl[leg.fund_id], policy_snapshot,
+                leg,
+                fund_cum_pnl[leg.fund_id],
+                policy_snapshot,
                 cp_exposures_per_fund[leg.fund_id],
             )
             today_sizes[(leg.fund_id, leg.sleeve_short, leg.worker)] = sz
@@ -340,7 +350,7 @@ def _aggregate(per_sim: list[dict], metric_keys: list[str]) -> dict:
             if not vals:
                 continue
             agg[fid][key] = {
-                "p5":  round(_pctl(vals, 5), 3),
+                "p5": round(_pctl(vals, 5), 3),
                 "p50": round(_pctl(vals, 50), 3),
                 "p95": round(_pctl(vals, 95), 3),
                 "mean": round(statistics.mean(vals), 3),
@@ -348,15 +358,16 @@ def _aggregate(per_sim: list[dict], metric_keys: list[str]) -> dict:
     return agg
 
 
-def run_mc(policy_snapshot: dict, days: int, sims: int, seed: int,
-           fund_filter: str | None = None) -> dict:
+def run_mc(
+    policy_snapshot: dict, days: int, sims: int, seed: int, fund_filter: str | None = None
+) -> dict:
     legs = _collect_legs(policy_snapshot, fund_filter=fund_filter)
     if not legs:
         return {"fund_filter": fund_filter, "error": "no legs found"}
 
     rng = random.Random(seed)
     per_sim = []
-    equity_samples = defaultdict(list)   # fund_id -> [curve for sim 0 ... min(5, sims)]
+    equity_samples = defaultdict(list)  # fund_id -> [curve for sim 0 ... min(5, sims)]
     for i in range(sims):
         sub_rng = random.Random(rng.random())
         result = _simulate_one(policy_snapshot, legs, days, sub_rng)
@@ -367,8 +378,15 @@ def run_mc(policy_snapshot: dict, days: int, sims: int, seed: int,
                 equity_samples[fid].append(m["equity_curve"])
         per_sim.append(sim_metrics)
 
-    metric_keys = ["sharpe", "sortino", "max_dd_pct", "cagr_pct",
-                   "ann_vol_pct", "win_rate_pct", "final_equity"]
+    metric_keys = [
+        "sharpe",
+        "sortino",
+        "max_dd_pct",
+        "cagr_pct",
+        "ann_vol_pct",
+        "win_rate_pct",
+        "final_equity",
+    ]
     agg = _aggregate(per_sim, metric_keys)
 
     return {
@@ -385,24 +403,34 @@ def run_mc(policy_snapshot: dict, days: int, sims: int, seed: int,
 
 # ---------- CLI output ----------
 
+
 def _print_summary(result: dict, label: str = ""):
     if "error" in result:
         print(f"[backtest] {result['error']}")
         return
     print()
-    hdr = f"=== Backtest {label} | sims={result['sims']} days={result['days']} " \
-          f"engine={'ON' if result['engine_enabled'] else 'off'} " \
-          f"kelly={result['kelly_fraction']} seed={result['seed']} ==="
+    hdr = (
+        f"=== Backtest {label} | sims={result['sims']} days={result['days']} "
+        f"engine={'ON' if result['engine_enabled'] else 'off'} "
+        f"kelly={result['kelly_fraction']} seed={result['seed']} ==="
+    )
     print(hdr)
     keys = ["sharpe", "sortino", "max_dd_pct", "cagr_pct", "ann_vol_pct", "win_rate_pct"]
-    labels = {"sharpe": "Sharpe", "sortino": "Sortino", "max_dd_pct": "MaxDD%",
-              "cagr_pct": "CAGR%", "ann_vol_pct": "AnnVol%", "win_rate_pct": "WinRate%"}
+    labels = {
+        "sharpe": "Sharpe",
+        "sortino": "Sortino",
+        "max_dd_pct": "MaxDD%",
+        "cagr_pct": "CAGR%",
+        "ann_vol_pct": "AnnVol%",
+        "win_rate_pct": "WinRate%",
+    }
     for fid, metrics in result["aggregated"].items():
         print(f"\n{fid}")
         print(f"  {'percentile':<6}  " + "  ".join(f"{labels[k]:>10}" for k in keys))
         for p in ("p5", "p50", "p95"):
-            row = "  ".join(f"{metrics[k][p]:>10.3f}" if k in metrics else "       n/a"
-                            for k in keys)
+            row = "  ".join(
+                f"{metrics[k][p]:>10.3f}" if k in metrics else "       n/a" for k in keys
+            )
             print(f"  {p:<6}  {row}")
 
 
@@ -410,8 +438,13 @@ def _print_compare(off_result: dict, on_result: dict):
     print()
     print("=== Engine ON vs OFF (p50 delta) ===")
     keys = ["sharpe", "sortino", "max_dd_pct", "cagr_pct", "ann_vol_pct"]
-    labels = {"sharpe": "ΔSharpe", "sortino": "ΔSortino", "max_dd_pct": "ΔMaxDD%",
-              "cagr_pct": "ΔCAGR%", "ann_vol_pct": "ΔAnnVol%"}
+    labels = {
+        "sharpe": "ΔSharpe",
+        "sortino": "ΔSortino",
+        "max_dd_pct": "ΔMaxDD%",
+        "cagr_pct": "ΔCAGR%",
+        "ann_vol_pct": "ΔAnnVol%",
+    }
     fids = sorted(set(off_result["aggregated"].keys()) | set(on_result["aggregated"].keys()))
     header = "  ".join(f"{labels[k]:>10}" for k in keys)
     print(f"{'fund':<22}  {header}")
@@ -433,6 +466,7 @@ def _write_outputs(result: dict, out_dir: Path, tag: str):
     (out_dir / f"backtest_{tag}.json").write_text(json.dumps(result, indent=2))
     # Equity curves as CSV — one column per sim sample
     import csv
+
     for fid, curves in result.get("equity_samples", {}).items():
         if not curves:
             continue
@@ -451,8 +485,15 @@ def _write_outputs(result: dict, out_dir: Path, tag: str):
 
 # ---------- Kelly sweep ----------
 
-def _run_kelly_sweep(policy_snapshot: dict, days: int, sims: int, seed: int,
-                     fund_filter: str | None, fractions: list[float]) -> list[dict]:
+
+def _run_kelly_sweep(
+    policy_snapshot: dict,
+    days: int,
+    sims: int,
+    seed: int,
+    fund_filter: str | None,
+    fractions: list[float],
+) -> list[dict]:
     rows = []
     for k in fractions:
         snap = copy.deepcopy(policy_snapshot)
@@ -474,37 +515,49 @@ def _print_kelly_sweep(rows: list[dict]):
             m = r["result"]["aggregated"].get(fid, {})
             if not m:
                 continue
-            print(f"  {r['kelly_fraction']:>6.2f}  "
-                  f"{m.get('sharpe', {}).get('p50', 0):>8.3f}  "
-                  f"{m.get('max_dd_pct', {}).get('p50', 0):>8.3f}  "
-                  f"{m.get('cagr_pct', {}).get('p50', 0):>8.3f}  "
-                  f"{m.get('ann_vol_pct', {}).get('p50', 0):>8.3f}")
+            print(
+                f"  {r['kelly_fraction']:>6.2f}  "
+                f"{m.get('sharpe', {}).get('p50', 0):>8.3f}  "
+                f"{m.get('max_dd_pct', {}).get('p50', 0):>8.3f}  "
+                f"{m.get('cagr_pct', {}).get('p50', 0):>8.3f}  "
+                f"{m.get('ann_vol_pct', {}).get('p50', 0):>8.3f}"
+            )
 
 
 # ---------- main ----------
 
+
 def main():
     ap = argparse.ArgumentParser(description="Hermes synthetic MC backtest")
-    ap.add_argument("--days", type=int, default=252, help="Trading days per sim (default 252 = 1yr)")
-    ap.add_argument("--sims", type=int, default=100, help="Monte Carlo paths per fund (default 100)")
+    ap.add_argument(
+        "--days", type=int, default=252, help="Trading days per sim (default 252 = 1yr)"
+    )
+    ap.add_argument(
+        "--sims", type=int, default=100, help="Monte Carlo paths per fund (default 100)"
+    )
     ap.add_argument("--seed", type=int, default=42, help="RNG seed")
     ap.add_argument("--fund", type=str, default=None, help="Restrict to one fund_id")
-    ap.add_argument("--compare", action="store_true",
-                    help="Run engine OFF and ON, print the delta")
-    ap.add_argument("--kelly-sweep", action="store_true",
-                    help="Sweep kelly_fraction 0.10..1.00 (engine ON)")
-    ap.add_argument("--output-dir", type=Path, default=None,
-                    help="Write JSON + equity CSVs to this dir (default: skip)")
+    ap.add_argument("--compare", action="store_true", help="Run engine OFF and ON, print the delta")
+    ap.add_argument(
+        "--kelly-sweep", action="store_true", help="Sweep kelly_fraction 0.10..1.00 (engine ON)"
+    )
+    ap.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Write JSON + equity CSVs to this dir (default: skip)",
+    )
     args = ap.parse_args()
 
     policy._load_policy.cache_clear()
     snap = policy._load_policy()
 
-    tag = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    tag = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     if args.kelly_sweep:
-        rows = _run_kelly_sweep(snap, args.days, args.sims, args.seed, args.fund,
-                                [0.10, 0.25, 0.50, 0.75, 1.00])
+        rows = _run_kelly_sweep(
+            snap, args.days, args.sims, args.seed, args.fund, [0.10, 0.25, 0.50, 0.75, 1.00]
+        )
         _print_kelly_sweep(rows)
         if args.output_dir:
             args.output_dir.mkdir(parents=True, exist_ok=True)

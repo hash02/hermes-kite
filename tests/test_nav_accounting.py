@@ -6,16 +6,18 @@ statement generation, period parsing.
 Runs standalone with just stdlib (no pytest required):
     python3 tests/test_nav_accounting.py
 """
+
 from __future__ import annotations
+
 import sys
 import unittest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "funds"))
+sys.path.insert(0, str(ROOT))
 
-import nav_accounting as nav  # noqa: E402
+from engine import nav_accounting as nav  # noqa: E402
 
 
 def _policy(mgmt_pct=1.0, perf_pct=20.0, hurdle_pct=0.0, capital=1000.0):
@@ -40,12 +42,11 @@ def _policy(mgmt_pct=1.0, perf_pct=20.0, hurdle_pct=0.0, capital=1000.0):
     }
 
 
-def _ledger(days_since_inception=50, hwm=1.0, units=1000.0,
-            mgmt_paid=0.0, perf_paid=0.0):
-    inception = datetime.now(timezone.utc)
+def _ledger(days_since_inception=50, hwm=1.0, units=1000.0, mgmt_paid=0.0, perf_paid=0.0):
+    inception = datetime.now(UTC)
     inception = inception.replace(hour=0, minute=0, second=0, microsecond=0)
     inception = inception.fromtimestamp(
-        inception.timestamp() - days_since_inception * 86400, tz=timezone.utc
+        inception.timestamp() - days_since_inception * 86400, tz=UTC
     )
     iso = inception.isoformat()
     return {
@@ -90,62 +91,92 @@ class TestMgmtFee(unittest.TestCase):
 
 class TestPerfFee(unittest.TestCase):
     def test_zero_when_below_hwm(self):
-        fee = nav._accrued_perf_fee(nav_per_unit=0.99, hwm_per_unit=1.0,
-                                    units=1000, perf_rate=20.0,
-                                    hurdle_rate_annual=0.0,
-                                    days_since_crystallization=90)
+        fee = nav._accrued_perf_fee(
+            nav_per_unit=0.99,
+            hwm_per_unit=1.0,
+            units=1000,
+            perf_rate=20.0,
+            hurdle_rate_annual=0.0,
+            days_since_crystallization=90,
+        )
         self.assertEqual(fee, 0.0)
 
     def test_linear_above_hwm(self):
         """NAV $1.02 vs HWM $1.00, 1000 units, 20% rate -> 0.02 * 1000 * 0.2 = 4.0."""
-        fee = nav._accrued_perf_fee(nav_per_unit=1.02, hwm_per_unit=1.0,
-                                    units=1000, perf_rate=20.0,
-                                    hurdle_rate_annual=0.0,
-                                    days_since_crystallization=90)
+        fee = nav._accrued_perf_fee(
+            nav_per_unit=1.02,
+            hwm_per_unit=1.0,
+            units=1000,
+            perf_rate=20.0,
+            hurdle_rate_annual=0.0,
+            days_since_crystallization=90,
+        )
         self.assertAlmostEqual(fee, 4.0, places=4)
 
     def test_hurdle_shields_gains_below_hurdle(self):
         """Hurdle 8% annual over 365 days -> effective HWM = 1.08; NAV 1.05 -> no fee."""
-        fee = nav._accrued_perf_fee(nav_per_unit=1.05, hwm_per_unit=1.0,
-                                    units=1000, perf_rate=20.0,
-                                    hurdle_rate_annual=8.0,
-                                    days_since_crystallization=365)
+        fee = nav._accrued_perf_fee(
+            nav_per_unit=1.05,
+            hwm_per_unit=1.0,
+            units=1000,
+            perf_rate=20.0,
+            hurdle_rate_annual=8.0,
+            days_since_crystallization=365,
+        )
         self.assertEqual(fee, 0.0)
 
     def test_fee_charged_only_on_excess_over_hurdle(self):
         """NAV 1.15, hurdle-lifted HWM 1.08 -> excess 0.07 * 1000 * 0.2 = 14.0."""
-        fee = nav._accrued_perf_fee(nav_per_unit=1.15, hwm_per_unit=1.0,
-                                    units=1000, perf_rate=20.0,
-                                    hurdle_rate_annual=8.0,
-                                    days_since_crystallization=365)
+        fee = nav._accrued_perf_fee(
+            nav_per_unit=1.15,
+            hwm_per_unit=1.0,
+            units=1000,
+            perf_rate=20.0,
+            hurdle_rate_annual=8.0,
+            days_since_crystallization=365,
+        )
         self.assertAlmostEqual(fee, 14.0, places=4)
 
 
 class TestComputeNav(unittest.TestCase):
     def test_zero_pnl_returns_par_nav(self):
         """No PnL -> NAV/unit gross equals initial."""
-        snap = nav.compute_nav("fund_t", _policy(mgmt_pct=0, perf_pct=0),
-                               _summary(0.0), _ledger(days_since_inception=0))
+        snap = nav.compute_nav(
+            "fund_t",
+            _policy(mgmt_pct=0, perf_pct=0),
+            _summary(0.0),
+            _ledger(days_since_inception=0),
+        )
         self.assertAlmostEqual(snap.nav_per_unit_gross, 1.0, places=4)
         self.assertAlmostEqual(snap.nav_per_unit_net, 1.0, places=4)
 
     def test_positive_pnl_lifts_nav(self):
-        snap = nav.compute_nav("fund_t", _policy(mgmt_pct=0, perf_pct=0),
-                               _summary(50.0), _ledger(days_since_inception=0))
+        snap = nav.compute_nav(
+            "fund_t",
+            _policy(mgmt_pct=0, perf_pct=0),
+            _summary(50.0),
+            _ledger(days_since_inception=0),
+        )
         self.assertAlmostEqual(snap.nav_per_unit_gross, 1.05, places=4)
 
     def test_mgmt_fee_reduces_net_nav(self):
         """1% annual mgmt over 365 days on $1000 -> $10 net equity loss -> NAV drops $0.01."""
-        snap = nav.compute_nav("fund_t", _policy(mgmt_pct=1.0, perf_pct=0),
-                               _summary(0.0), _ledger(days_since_inception=365))
+        snap = nav.compute_nav(
+            "fund_t",
+            _policy(mgmt_pct=1.0, perf_pct=0),
+            _summary(0.0),
+            _ledger(days_since_inception=365),
+        )
         self.assertAlmostEqual(snap.accrued_mgmt_fee_usd, 10.0, places=2)
         self.assertAlmostEqual(snap.nav_per_unit_net, 0.99, places=3)
 
     def test_perf_fee_only_on_outperformance(self):
         """NAV 1.05 vs HWM 1.00, 20% perf, no hurdle -> fee 1000 (ish)."""
         snap = nav.compute_nav(
-            "fund_t", _policy(mgmt_pct=0, perf_pct=20.0, hurdle_pct=0),
-            _summary(50.0), _ledger(days_since_inception=30, hwm=1.0),
+            "fund_t",
+            _policy(mgmt_pct=0, perf_pct=20.0, hurdle_pct=0),
+            _summary(50.0),
+            _ledger(days_since_inception=30, hwm=1.0),
         )
         # gross NAV/unit = 1050/1000 = 1.05; perf fee = 0.05 * 1000 * 0.2 = 10
         self.assertAlmostEqual(snap.accrued_perf_fee_usd, 10.0, places=2)
@@ -162,7 +193,9 @@ class TestCrystallize(unittest.TestCase):
         self.assertAlmostEqual(report["fee_usd"], 10.0, places=1)
         # Ledger mutated: paid now ~$10
         self.assertAlmostEqual(
-            ledger["funds"]["fund_t"]["cumulative_mgmt_fees_paid_usd"], 10.0, places=1,
+            ledger["funds"]["fund_t"]["cumulative_mgmt_fees_paid_usd"],
+            10.0,
+            places=1,
         )
 
     def test_perf_crystallization_resets_hwm(self):
@@ -176,7 +209,7 @@ class TestCrystallize(unittest.TestCase):
         # HWM should have moved up to NAV (post-fee)
         new_hwm = ledger["funds"]["fund_t"]["hwm_per_unit"]
         self.assertGreater(new_hwm, 1.0)
-        self.assertLess(new_hwm, 1.05)   # below gross NAV because fee deducted
+        self.assertLess(new_hwm, 1.05)  # below gross NAV because fee deducted
 
     def test_perf_crystallization_noop_below_hwm(self):
         policy = _policy(mgmt_pct=0, perf_pct=20.0, hurdle_pct=0)
@@ -191,28 +224,28 @@ class TestCrystallize(unittest.TestCase):
 class TestPeriodParsing(unittest.TestCase):
     def test_month(self):
         start, end = nav._period_bounds("2026-04")
-        self.assertEqual(start, datetime(2026, 4, 1, tzinfo=timezone.utc))
-        self.assertEqual(end,   datetime(2026, 5, 1, tzinfo=timezone.utc))
+        self.assertEqual(start, datetime(2026, 4, 1, tzinfo=UTC))
+        self.assertEqual(end, datetime(2026, 5, 1, tzinfo=UTC))
 
     def test_december_month(self):
         start, end = nav._period_bounds("2026-12")
-        self.assertEqual(start, datetime(2026, 12, 1, tzinfo=timezone.utc))
-        self.assertEqual(end,   datetime(2027, 1, 1, tzinfo=timezone.utc))
+        self.assertEqual(start, datetime(2026, 12, 1, tzinfo=UTC))
+        self.assertEqual(end, datetime(2027, 1, 1, tzinfo=UTC))
 
     def test_quarter(self):
         start, end = nav._period_bounds("2026-Q2")
-        self.assertEqual(start, datetime(2026, 4, 1, tzinfo=timezone.utc))
-        self.assertEqual(end,   datetime(2026, 7, 1, tzinfo=timezone.utc))
+        self.assertEqual(start, datetime(2026, 4, 1, tzinfo=UTC))
+        self.assertEqual(end, datetime(2026, 7, 1, tzinfo=UTC))
 
     def test_q4_wraps_year(self):
         start, end = nav._period_bounds("2026-Q4")
-        self.assertEqual(start, datetime(2026, 10, 1, tzinfo=timezone.utc))
-        self.assertEqual(end,   datetime(2027, 1, 1, tzinfo=timezone.utc))
+        self.assertEqual(start, datetime(2026, 10, 1, tzinfo=UTC))
+        self.assertEqual(end, datetime(2027, 1, 1, tzinfo=UTC))
 
     def test_annual(self):
         start, end = nav._period_bounds("2026")
-        self.assertEqual(start, datetime(2026, 1, 1, tzinfo=timezone.utc))
-        self.assertEqual(end,   datetime(2027, 1, 1, tzinfo=timezone.utc))
+        self.assertEqual(start, datetime(2026, 1, 1, tzinfo=UTC))
+        self.assertEqual(end, datetime(2027, 1, 1, tzinfo=UTC))
 
 
 class TestStatement(unittest.TestCase):
@@ -220,9 +253,16 @@ class TestStatement(unittest.TestCase):
         """generate_statement uses loaded policy/summary/ledger — here we test
         via the low-level path with monkey-patched file readers."""
         from unittest.mock import patch
-        with patch.object(nav, "_load_json", side_effect=[
-            _policy(), _summary(12.0), _ledger(days_since_inception=30),
-        ]):
+
+        with patch.object(
+            nav,
+            "_load_json",
+            side_effect=[
+                _policy(),
+                _summary(12.0),
+                _ledger(days_since_inception=30),
+            ],
+        ):
             stmt = nav.generate_statement("fund_t", "2026-04")
         self.assertEqual(stmt["fund_id"], "fund_t")
         self.assertEqual(stmt["statement_period"], "2026-04")
