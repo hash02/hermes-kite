@@ -24,12 +24,14 @@ Cycle work:
 
 Paper only. No real tx. No keys. R-001 compliant (free API).
 """
+
 from __future__ import annotations
+
 import json
 import os
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 HERMES = Path.home() / ".hermes" / "brain"
@@ -65,8 +67,13 @@ def fetch_apy():
 
 def load_portfolio():
     if not PORTFOLIO_FILE.exists():
-        return {"positions": [], "realized_pnl": 0.0, "total_trades": 0,
-                "correct_trades": 0, "starting_capital": 10000.0}
+        return {
+            "positions": [],
+            "realized_pnl": 0.0,
+            "total_trades": 0,
+            "correct_trades": 0,
+            "starting_capital": 10000.0,
+        }
     try:
         return json.loads(PORTFOLIO_FILE.read_text())
     except Exception:
@@ -122,8 +129,12 @@ def upsert_position(pf, apy):
             accrued = existing.get("size_usd", PRINCIPAL_USD) * apy * dt_years
             existing["size_usd"] = round(existing.get("size_usd", PRINCIPAL_USD) + accrued, 6)
             existing["pnl_usd"] = round(existing["size_usd"] - PRINCIPAL_USD, 6)
-            existing["high_water_mark"] = max(existing.get("high_water_mark", PRINCIPAL_USD), existing["size_usd"])
-            existing["low_water_mark"] = min(existing.get("low_water_mark", PRINCIPAL_USD), existing["size_usd"])
+            existing["high_water_mark"] = max(
+                existing.get("high_water_mark", PRINCIPAL_USD), existing["size_usd"]
+            )
+            existing["low_water_mark"] = min(
+                existing.get("low_water_mark", PRINCIPAL_USD), existing["size_usd"]
+            )
         existing["current_apy"] = apy if apy is not None else existing.get("current_apy", 0.0)
         existing["last_update"] = now
         if "principal_usd" not in existing:
@@ -135,7 +146,7 @@ def upsert_position(pf, apy):
 
 def write_status(position, apy, ok, error_msg=None):
     STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    now_iso = datetime.now(timezone.utc).astimezone().isoformat()
+    now_iso = datetime.now(UTC).astimezone().isoformat()
     size_usd = position.get("size_usd", 0) if position else 0
     pnl = position.get("pnl_usd", 0) if position else 0
     status = {
@@ -203,7 +214,7 @@ def main():
     save_portfolio_atomic(pf)
     write_status(position, apy, ok, err)
 
-    apy_str = f"{apy*100:.4f}%" if apy is not None else "UNK"
+    apy_str = f"{apy * 100:.4f}%" if apy is not None else "UNK"
     size_str = f"{position.get('size_usd', 0):.6f}" if position else "0"
     pnl_str = f"{position.get('pnl_usd', 0):.6f}" if position else "0"
     print(f"[aave_usdc] apy={apy_str}  size_usd=${size_str}  pnl=${pnl_str}  ok={ok}")

@@ -27,14 +27,16 @@ Scan-only mode:
 
 Paper only. No real tx. No exchange keys. R-001 compliant (free Binance public).
 """
+
 from __future__ import annotations
+
 import argparse
 import json
 import logging
 import os
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -42,11 +44,11 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 # --- Config (mirrors funds/DELTA_NEUTRAL_WORKER_PROPOSAL.md) ---
-MIN_ANNUALIZED_RATE = 8.0         # % annualized, absolute
+MIN_ANNUALIZED_RATE = 8.0  # % annualized, absolute
 MAX_POSITION_USD = 50.0
 MAX_OPEN_POSITIONS = 2
 MAX_TOTAL_DEPLOYED = 400.0
-MIN_FUNDING_HISTORY_HOURS = 24    # 3 cycles of same-sign history
+MIN_FUNDING_HISTORY_HOURS = 24  # 3 cycles of same-sign history
 UNWIND_ON_SIGN_FLIP = True
 # In paper mode, allow a position on the first sighting of a qualifying |rate|
 # without waiting for same-sign confirmation. Live mode must flip this off.
@@ -68,12 +70,13 @@ UA = {"User-Agent": "hermes-delta-neutral/1.0"}
 class FundingOpp(NamedTuple):
     symbol: str
     mark_price: float
-    funding_rate: float          # per-cycle (8h)
-    annualized_pct: float        # rate * 3 * 365 * 100
+    funding_rate: float  # per-cycle (8h)
+    annualized_pct: float  # rate * 3 * 365 * 100
     next_funding_time_ms: int
 
 
 # ---------- fetch ----------
+
 
 def fetch_binance_funding() -> list[FundingOpp]:
     try:
@@ -103,6 +106,7 @@ def rank_opps(opps: list[FundingOpp], min_rate: float) -> list[FundingOpp]:
 
 
 # ---------- state ----------
+
 
 def load_state() -> dict:
     if STATE_FILE.exists():
@@ -139,10 +143,16 @@ def check_same_sign_history(state: dict, symbol: str, cur_rate: float) -> bool:
 
 # ---------- portfolio ----------
 
+
 def load_portfolio() -> dict:
     if not PORTFOLIO_FILE.exists():
-        return {"positions": [], "realized_pnl": 0.0, "total_trades": 0,
-                "correct_trades": 0, "starting_capital": 10000.0}
+        return {
+            "positions": [],
+            "realized_pnl": 0.0,
+            "total_trades": 0,
+            "correct_trades": 0,
+            "starting_capital": 10000.0,
+        }
     try:
         return json.loads(PORTFOLIO_FILE.read_text())
     except Exception:
@@ -156,8 +166,11 @@ def save_portfolio_atomic(pf: dict) -> None:
 
 
 def existing_dn_positions(pf: dict) -> list[dict]:
-    return [p for p in pf.get("positions", []) if isinstance(p, dict)
-            and p.get("worker") == WORKER_NAME and not p.get("resolved")]
+    return [
+        p
+        for p in pf.get("positions", [])
+        if isinstance(p, dict) and p.get("worker") == WORKER_NAME and not p.get("resolved")
+    ]
 
 
 def position_id(symbol: str) -> str:
@@ -236,11 +249,17 @@ def resolve_position(pos: dict, reason: str) -> None:
 
 # ---------- status ----------
 
-def write_status(open_positions: list[dict], total_deployed: float,
-                 opps: list[FundingOpp], qualifying: int, ok: bool,
-                 error_msg: str | None = None) -> None:
+
+def write_status(
+    open_positions: list[dict],
+    total_deployed: float,
+    opps: list[FundingOpp],
+    qualifying: int,
+    ok: bool,
+    error_msg: str | None = None,
+) -> None:
     STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    now_iso = datetime.now(timezone.utc).astimezone().isoformat()
+    now_iso = datetime.now(UTC).astimezone().isoformat()
     total_pnl = sum(p.get("pnl_usd", 0) for p in open_positions)
     avg_apy = 0.0
     if open_positions:
@@ -293,6 +312,7 @@ def write_status(open_positions: list[dict], total_deployed: float,
 
 # ---------- modes ----------
 
+
 def run_once() -> None:
     state = load_state()
     opps = fetch_binance_funding()
@@ -314,8 +334,9 @@ def run_once() -> None:
         result = accrue_and_check_flip(pos, cur)
         if result == "flip":
             resolve_position(pos, "funding_sign_flipped")
-            logger.info("delta_neutral: resolved %s on sign flip, pnl=%.6f",
-                        pos.get("symbol"), pos.get("pnl_usd", 0))
+            logger.info(
+                "delta_neutral: resolved %s on sign flip, pnl=%.6f", pos.get("symbol"), pos.get("pnl_usd", 0)
+            )
 
     # 2. Recount still-open positions after resolves
     open_dn = existing_dn_positions(pf)
@@ -337,8 +358,9 @@ def run_once() -> None:
         pos = open_position(pf, opp, size)
         open_dn.append(pos)
         total_deployed += size
-        logger.info("delta_neutral: opened %s size=$%.2f entry_apy=%.2f%%",
-                    opp.symbol, size, opp.annualized_pct)
+        logger.info(
+            "delta_neutral: opened %s size=$%.2f entry_apy=%.2f%%", opp.symbol, size, opp.annualized_pct
+        )
 
     # 4. Persist everything
     save_portfolio_atomic(pf)
@@ -349,8 +371,10 @@ def run_once() -> None:
     write_status(open_dn, total_deployed, opps, len(ranked), ok=True)
 
     total_pnl = sum(p.get("pnl_usd", 0) for p in open_dn)
-    print(f"[delta_neutral] open={len(open_dn)} deployed=${total_deployed:.2f} "
-          f"cum_funding=${total_pnl:.6f} universe={len(opps)} qualifying={len(ranked)}")
+    print(
+        f"[delta_neutral] open={len(open_dn)} deployed=${total_deployed:.2f} "
+        f"cum_funding=${total_pnl:.6f} universe={len(opps)} qualifying={len(ranked)}"
+    )
 
 
 def scan(min_rate: float) -> None:
@@ -363,7 +387,7 @@ def scan(min_rate: float) -> None:
     ranked = rank_opps(opps, min_rate)
     qualified = [(o, check_same_sign_history(state, o.symbol, o.funding_rate)) for o in ranked[:20]]
 
-    print(f"\n=== Delta-Neutral Funding Scan ===")
+    print("\n=== Delta-Neutral Funding Scan ===")
     print(f"Universe: {len(opps)} Binance perps | min rate: {min_rate}% annualized")
     print(f"Qualifying: {len(ranked)} | same-sign history required: {MIN_FUNDING_HISTORY_HOURS}h")
     print()
@@ -371,7 +395,9 @@ def scan(min_rate: float) -> None:
     for o, ss in qualified[:15]:
         action = "LONG SPOT + SHORT PERP" if o.annualized_pct > 0 else "SHORT SPOT + LONG PERP"
         gate = "OK" if ss else "wait"
-        print(f"{o.symbol:<14} {o.annualized_pct:>+8.2f} {o.funding_rate:>+10.6f} {o.mark_price:>14.4f} {gate:>6} {action:<26}")
+        print(
+            f"{o.symbol:<14} {o.annualized_pct:>+8.2f} {o.funding_rate:>+10.6f} {o.mark_price:>14.4f} {gate:>6} {action:<26}"
+        )
 
     state["last_scan"] = int(time.time())
     save_state(state)
@@ -380,8 +406,12 @@ def scan(min_rate: float) -> None:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scan", action="store_true", help="Scan mode (read-only)")
-    ap.add_argument("--min-rate", type=float, default=MIN_ANNUALIZED_RATE,
-                    help="Minimum annualized funding rate (percent)")
+    ap.add_argument(
+        "--min-rate",
+        type=float,
+        default=MIN_ANNUALIZED_RATE,
+        help="Minimum annualized funding rate (percent)",
+    )
     args = ap.parse_args()
     if args.scan:
         scan(args.min_rate)
