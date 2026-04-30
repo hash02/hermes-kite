@@ -14,15 +14,17 @@ this module stay short and consistent.
 
 Not a worker on its own. Import-only.
 """
+
 from __future__ import annotations
+
 import json
 import os
 import time
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
 
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
@@ -34,7 +36,7 @@ UA = {"User-Agent": "hermes-yield-base/1.0"}
 class YieldConfig:
     worker_name: str
     symbol: str
-    sleeve_targets: dict              # {"fund_xxx.sleeve": usd_principal}
+    sleeve_targets: dict  # {"fund_xxx.sleeve": usd_principal}
     # Either an APY fetcher callable, or a DeFiLlama pool_id to use the default.
     defillama_pool_id: str | None = None
     apy_fetcher: Callable[[], tuple[float | None, str]] | None = None
@@ -43,7 +45,7 @@ class YieldConfig:
     chain: str = "ethereum"
     asset: str = ""
     counterparty: str = ""
-    direction: str = "SUPPLY"         # SUPPLY / HOLD / VAULT
+    direction: str = "SUPPLY"  # SUPPLY / HOLD / VAULT
     confidence: float = 0.92
     status_file: Path = field(init=False)
 
@@ -68,11 +70,16 @@ def _defillama_apy(pool_id: str):
 
 def load_portfolio():
     if not PORTFOLIO_FILE.exists():
-        return {"positions": [], "realized_pnl": 0.0, "total_trades": 0,
-                "correct_trades": 0, "starting_capital": 10000.0}
+        return {
+            "positions": [],
+            "realized_pnl": 0.0,
+            "total_trades": 0,
+            "correct_trades": 0,
+            "starting_capital": 10000.0,
+        }
     try:
         return json.loads(PORTFOLIO_FILE.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {"positions": [], "realized_pnl": 0.0}
 
 
@@ -86,8 +93,7 @@ def _position_id(worker_name: str, sleeve_id: str) -> str:
     return f"{worker_name}:{sleeve_id}"
 
 
-def _upsert_sleeve_position(pf, cfg: YieldConfig, sleeve_id: str,
-                            principal: float, apy):
+def _upsert_sleeve_position(pf, cfg: YieldConfig, sleeve_id: str, principal: float, apy):
     now = time.time()
     fund_id = sleeve_id.split(".", 1)[0]
     pos_id = _position_id(cfg.worker_name, sleeve_id)
@@ -128,7 +134,7 @@ def _upsert_sleeve_position(pf, cfg: YieldConfig, sleeve_id: str,
         positions.append(position)
         existing = position
     else:
-        last = existing.get("last_update", existing.get("entry_time", now))
+        last = float(existing.get("last_update") or existing.get("entry_time") or now)
         prior_principal = existing.get("principal_usd", principal)
         if prior_principal != principal:
             accrued_so_far = existing.get("size_usd", prior_principal) - prior_principal
@@ -139,8 +145,12 @@ def _upsert_sleeve_position(pf, cfg: YieldConfig, sleeve_id: str,
             accrued = existing.get("size_usd", principal) * apy * dt_years
             existing["size_usd"] = round(existing.get("size_usd", principal) + accrued, 6)
             existing["pnl_usd"] = round(existing["size_usd"] - existing["principal_usd"], 6)
-            existing["high_water_mark"] = max(existing.get("high_water_mark", principal), existing["size_usd"])
-            existing["low_water_mark"] = min(existing.get("low_water_mark", principal), existing["size_usd"])
+            existing["high_water_mark"] = max(
+                existing.get("high_water_mark", principal), existing["size_usd"]
+            )
+            existing["low_water_mark"] = min(
+                existing.get("low_water_mark", principal), existing["size_usd"]
+            )
         existing["current_apy"] = apy if apy is not None else existing.get("current_apy", 0.0)
         existing["last_update"] = now
         existing["fund"] = fund_id
@@ -152,7 +162,7 @@ def _upsert_sleeve_position(pf, cfg: YieldConfig, sleeve_id: str,
 
 def _write_status(cfg: YieldConfig, positions, apy, ok, error_msg=None):
     cfg.status_file.parent.mkdir(parents=True, exist_ok=True)
-    now_iso = datetime.now(timezone.utc).astimezone().isoformat()
+    now_iso = datetime.now(UTC).astimezone().isoformat()
     total_size = sum(p.get("size_usd", 0) for p in positions)
     total_pnl = sum(p.get("pnl_usd", 0) for p in positions)
     total_principal = sum(p.get("principal_usd", 0) for p in positions)
@@ -205,7 +215,11 @@ def run_yield(cfg: YieldConfig):
     err = None
     fetcher = cfg.apy_fetcher
     if fetcher is None and cfg.defillama_pool_id:
-        fetcher = lambda: _defillama_apy(cfg.defillama_pool_id)
+        pool_id = cfg.defillama_pool_id
+
+        def fetcher():
+            return _defillama_apy(pool_id)
+
     if fetcher is None:
         ok = False
         err = "no apy source configured"
@@ -226,8 +240,10 @@ def run_yield(cfg: YieldConfig):
     save_portfolio_atomic(pf)
     _write_status(cfg, positions, apy, ok, err)
 
-    apy_str = f"{apy*100:.4f}%" if apy is not None else "UNK"
+    apy_str = f"{apy * 100:.4f}%" if apy is not None else "UNK"
     total_size = sum(p.get("size_usd", 0) for p in positions)
     total_pnl = sum(p.get("pnl_usd", 0) for p in positions)
-    print(f"[{cfg.worker_name}] apy={apy_str}  sleeves={len(positions)}  "
-          f"total_size=${total_size:.6f}  total_pnl=${total_pnl:.6f}  ok={ok}")
+    print(
+        f"[{cfg.worker_name}] apy={apy_str}  sleeves={len(positions)}  "
+        f"total_size=${total_size:.6f}  total_pnl=${total_pnl:.6f}  ok={ok}"
+    )

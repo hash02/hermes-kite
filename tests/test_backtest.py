@@ -9,16 +9,17 @@ Covers the pure math (metrics, percentiles, daily params), the simulator
 output shape, and a fixed-seed regression so changes to the MC math are
 caught before they land.
 """
+
 from __future__ import annotations
-import math
+
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "funds"))
+sys.path.insert(0, str(ROOT))
 
-import backtest  # noqa: E402
+from engine import backtest  # noqa: E402
 
 
 class TestMetrics(unittest.TestCase):
@@ -33,7 +34,8 @@ class TestMetrics(unittest.TestCase):
         # 100 -> 90 (-10), then 95 -> 50 (-47.4%)
         self.assertAlmostEqual(
             backtest._max_drawdown_pct([100, 90, 100, 95, 50]),
-            -50.0, places=3,  # from peak 100 to trough 50
+            -50.0,
+            places=3,  # from peak 100 to trough 50
         )
 
     def test_sharpe_zero_for_zero_std(self):
@@ -50,6 +52,7 @@ class TestMetrics(unittest.TestCase):
         # Positive mean with varied up/down returns — Sortino should be
         # greater than Sharpe because downside stddev < total stddev.
         import random
+
         rng = random.Random(7)
         ups = [rng.uniform(0.005, 0.015) for _ in range(60)]
         downs = [rng.uniform(-0.008, -0.002) for _ in range(40)]
@@ -62,7 +65,9 @@ class TestMetrics(unittest.TestCase):
         # Start 1000, end 2000 over 252 days -> 100% CAGR
         equity = [1000] + [1000] * 250 + [2000]
         self.assertAlmostEqual(
-            backtest._cagr_pct(equity, 252), 100.0, places=1,
+            backtest._cagr_pct(equity, 252),
+            100.0,
+            places=1,
         )
 
     def test_cagr_zero_for_flat(self):
@@ -71,7 +76,8 @@ class TestMetrics(unittest.TestCase):
 
     def test_win_rate(self):
         self.assertEqual(
-            backtest._win_rate_pct([1, 1, 1, -1, -1, 0, 0, 0, 0, 0]), 30.0,
+            backtest._win_rate_pct([1, 1, 1, -1, -1, 0, 0, 0, 0, 0]),
+            30.0,
         )
 
     def test_ann_vol(self):
@@ -136,8 +142,15 @@ class TestRunMC(unittest.TestCase):
         self.assertEqual(res["days"], 100)
         self.assertIn("fund_x", res["aggregated"])
         m = res["aggregated"]["fund_x"]
-        for key in ["sharpe", "sortino", "max_dd_pct", "cagr_pct",
-                    "ann_vol_pct", "win_rate_pct", "final_equity"]:
+        for key in [
+            "sharpe",
+            "sortino",
+            "max_dd_pct",
+            "cagr_pct",
+            "ann_vol_pct",
+            "win_rate_pct",
+            "final_equity",
+        ]:
             self.assertIn(key, m)
             self.assertIn("p5", m[key])
             self.assertIn("p50", m[key])

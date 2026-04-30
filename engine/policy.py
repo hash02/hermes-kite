@@ -7,7 +7,9 @@ File: config/policy.json (at repo root). See config/README.md for schema.
 Missing / malformed file -> every helper returns a safe default (usually an
 empty dict), letting workers fall back to their built-in values.
 """
+
 from __future__ import annotations
+
 import json
 import os
 from functools import lru_cache
@@ -30,7 +32,10 @@ def _load_policy() -> dict:
         return {}
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
+        # Malformed or unreadable policy file. Fall back to empty so workers
+        # use their built-in defaults; CI's json-validate hook catches malformed
+        # commits before they land.
         return {}
 
 
@@ -40,6 +45,7 @@ def reload() -> None:
 
 
 # ---------- fund / sleeve lookup ----------
+
 
 def fund_cfg(fund_id: str) -> dict:
     return _load_policy().get("funds", {}).get(fund_id, {})
@@ -54,6 +60,7 @@ def all_fund_ids() -> list[str]:
 
 
 # ---------- worker lookup ----------
+
 
 def worker_cfg(worker_name: str) -> dict:
     """Return the per-worker knobs block (not allocation — those live under funds.*)."""
@@ -80,12 +87,14 @@ def sleeve_targets_for(worker_name: str) -> dict:
         return static
     # Lazy import — avoids a circular dependency at module load.
     try:
-        from risk_engine import apply_engine   # type: ignore
-    except Exception:
+        from engine.risk_engine import apply_engine
+    except ImportError:
         return static
     try:
         return apply_engine(worker_name, static)
-    except Exception:
+    except Exception:  # noqa: BLE001 — engine failure must not break the worker
+        # Engine bug should not take a worker offline; fall back to static
+        # sizing and let the next reconcile run flag the inconsistency.
         return static
 
 
@@ -138,6 +147,7 @@ def fund_router_config() -> dict:
 
 
 # ---------- risk (math-engine knobs) ----------
+
 
 def risk_cfg() -> dict:
     return _load_policy().get("risk", {})

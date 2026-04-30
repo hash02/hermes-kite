@@ -24,15 +24,17 @@ Same contract as aave_usdc and morpho_usdc:
 
 Paper only. R-001 compliant.
 """
+
 from __future__ import annotations
+
 import json
 import os
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from policy import sleeve_targets_for
+from engine.policy import sleeve_targets_for
 
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
@@ -69,11 +71,16 @@ def fetch_apy():
 
 def load_portfolio():
     if not PORTFOLIO_FILE.exists():
-        return {"positions": [], "realized_pnl": 0.0, "total_trades": 0,
-                "correct_trades": 0, "starting_capital": 10000.0}
+        return {
+            "positions": [],
+            "realized_pnl": 0.0,
+            "total_trades": 0,
+            "correct_trades": 0,
+            "starting_capital": 10000.0,
+        }
     try:
         return json.loads(PORTFOLIO_FILE.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {"positions": [], "realized_pnl": 0.0}
 
 
@@ -139,8 +146,12 @@ def upsert_sleeve_position(pf, sleeve_id: str, principal: float, apy):
             accrued = existing.get("size_usd", principal) * apy * dt_years
             existing["size_usd"] = round(existing.get("size_usd", principal) + accrued, 6)
             existing["pnl_usd"] = round(existing["size_usd"] - existing["principal_usd"], 6)
-            existing["high_water_mark"] = max(existing.get("high_water_mark", principal), existing["size_usd"])
-            existing["low_water_mark"] = min(existing.get("low_water_mark", principal), existing["size_usd"])
+            existing["high_water_mark"] = max(
+                existing.get("high_water_mark", principal), existing["size_usd"]
+            )
+            existing["low_water_mark"] = min(
+                existing.get("low_water_mark", principal), existing["size_usd"]
+            )
         existing["current_apy"] = apy if apy is not None else existing.get("current_apy", 0.0)
         existing["last_update"] = now
         existing["fund"] = fund_id
@@ -152,7 +163,7 @@ def upsert_sleeve_position(pf, sleeve_id: str, principal: float, apy):
 
 def write_status(positions, apy, ok, error_msg=None):
     STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    now_iso = datetime.now(timezone.utc).astimezone().isoformat()
+    now_iso = datetime.now(UTC).astimezone().isoformat()
     total_size = sum(p.get("size_usd", 0) for p in positions)
     total_pnl = sum(p.get("pnl_usd", 0) for p in positions)
     total_principal = sum(p.get("principal_usd", 0) for p in positions)
@@ -219,11 +230,13 @@ def main():
     save_portfolio_atomic(pf)
     write_status(positions, apy, ok, err)
 
-    apy_str = f"{apy*100:.4f}%" if apy is not None else "UNK"
+    apy_str = f"{apy * 100:.4f}%" if apy is not None else "UNK"
     total_size = sum(p.get("size_usd", 0) for p in positions)
     total_pnl = sum(p.get("pnl_usd", 0) for p in positions)
-    print(f"[sgho] apy={apy_str}  sleeves={len(positions)}  "
-          f"total_size=${total_size:.6f}  total_pnl=${total_pnl:.6f}  ok={ok}")
+    print(
+        f"[sgho] apy={apy_str}  sleeves={len(positions)}  "
+        f"total_size=${total_size:.6f}  total_pnl=${total_pnl:.6f}  ok={ok}"
+    )
 
 
 if __name__ == "__main__":

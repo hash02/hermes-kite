@@ -12,17 +12,19 @@ and `sleeve` for per-fund routing.
 
 Data source: https://api.coingecko.com/api/v3/coins/markets (free tier, no key)
 """
+
 from __future__ import annotations
+
 import json
-import logging
 import os
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-from policy import sleeve_targets_for, worker_cfg
+from engine.logging_setup import setup_logger
+from engine.policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "crypto_memecoins"
 HERMES = Path.home() / ".hermes" / "brain"
@@ -46,8 +48,7 @@ CG_URL = (
     "&per_page=50&page=1&price_change_percentage=7d"
 )
 
-log = logging.getLogger(WORKER_NAME)
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+log = setup_logger(WORKER_NAME)
 
 UA = {"User-Agent": "hermes-crypto-memecoins/1.0"}
 
@@ -66,13 +67,15 @@ def fetch_memecoins() -> list[dict]:
             mcap = float(row.get("market_cap") or 0)
             if mcap < MIN_MARKET_CAP_USD:
                 continue
-            out.append({
-                "id": row["id"],
-                "symbol": row["symbol"].upper(),
-                "price": float(row["current_price"]),
-                "mcap": mcap,
-                "change_7d": float(row.get("price_change_percentage_7d_in_currency") or 0),
-            })
+            out.append(
+                {
+                    "id": row["id"],
+                    "symbol": row["symbol"].upper(),
+                    "price": float(row["current_price"]),
+                    "mcap": mcap,
+                    "change_7d": float(row.get("price_change_percentage_7d_in_currency") or 0),
+                }
+            )
         except (KeyError, TypeError, ValueError):
             continue
     return out
@@ -83,7 +86,7 @@ def load_json(p, default):
         return default
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return default
 
 
@@ -112,7 +115,7 @@ def positions_for_sleeve(positions, sleeve_id, open_only=True):
 def run_once():
     portfolio = load_json(PORTFOLIO_FILE, {"positions": []})
     positions = portfolio.get("positions", []) if isinstance(portfolio, dict) else portfolio
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     universe = fetch_memecoins()
     by_id = {m["id"]: m for m in universe}
 
@@ -191,43 +194,50 @@ def run_once():
     else:
         save_json_atomic(PORTFOLIO_FILE, positions)
 
-    all_open = [p for p in positions if isinstance(p, dict)
-                and p.get("worker") == WORKER_NAME and not p.get("resolved")]
+    all_open = [
+        p
+        for p in positions
+        if isinstance(p, dict) and p.get("worker") == WORKER_NAME and not p.get("resolved")
+    ]
     deployed = sum(p.get("size_usd", 0) for p in all_open)
     unrealized = sum(p.get("pnl_usd", 0) for p in all_open)
 
-    save_json_atomic(STATUS_FILE, {
-        "worker_name": WORKER_NAME,
-        "strategy_type": "memecoin_momentum",
-        "status": "active" if all_open else "scanning",
-        "last_heartbeat": datetime.now().astimezone().isoformat(),
-        "position_summary": {
-            "open_positions": len(all_open),
-            "total_capital_deployed_usd": round(deployed, 4),
-            "unrealized_pnl_usd": round(unrealized, 4),
+    save_json_atomic(
+        STATUS_FILE,
+        {
+            "worker_name": WORKER_NAME,
+            "strategy_type": "memecoin_momentum",
+            "status": "active" if all_open else "scanning",
+            "last_heartbeat": datetime.now().astimezone().isoformat(),
+            "position_summary": {
+                "open_positions": len(all_open),
+                "total_capital_deployed_usd": round(deployed, 4),
+                "unrealized_pnl_usd": round(unrealized, 4),
+            },
+            "this_cycle": {"opened": opened, "resolved": resolved, "universe_size": len(universe)},
+            "risk": {
+                "position_sizing_method": "even_slot",
+                "sleeve_targets_usd": SLEEVE_TARGETS,
+                "max_open_positions": MAX_OPEN_POSITIONS,
+                "entry_7d_pct": ENTRY_7D_PCT,
+                "exit_7d_pct": EXIT_7D_PCT,
+                "stop_loss_pct": STOP_LOSS_PCT,
+                "min_market_cap_usd": MIN_MARKET_CAP_USD,
+            },
+            "strategy_config": {
+                "source": "coingecko_public_meme_category",
+                "fund_sleeves": list(SLEEVE_TARGETS.keys()),
+            },
+            "errors_last_24h": 0,
+            "health_check": "green",
         },
-        "this_cycle": {"opened": opened, "resolved": resolved,
-                       "universe_size": len(universe)},
-        "risk": {
-            "position_sizing_method": "even_slot",
-            "sleeve_targets_usd": SLEEVE_TARGETS,
-            "max_open_positions": MAX_OPEN_POSITIONS,
-            "entry_7d_pct": ENTRY_7D_PCT,
-            "exit_7d_pct": EXIT_7D_PCT,
-            "stop_loss_pct": STOP_LOSS_PCT,
-            "min_market_cap_usd": MIN_MARKET_CAP_USD,
-        },
-        "strategy_config": {
-            "source": "coingecko_public_meme_category",
-            "fund_sleeves": list(SLEEVE_TARGETS.keys()),
-        },
-        "errors_last_24h": 0,
-        "health_check": "green",
-    })
+    )
 
-    print(f"[{WORKER_NAME}] open={len(all_open)} deployed=${deployed:.2f} "
-          f"unrealized=${unrealized:.4f} opened={opened} resolved={resolved} "
-          f"universe={len(universe)}")
+    print(
+        f"[{WORKER_NAME}] open={len(all_open)} deployed=${deployed:.2f} "
+        f"unrealized=${unrealized:.4f} opened={opened} resolved={resolved} "
+        f"universe={len(universe)}"
+    )
 
 
 if __name__ == "__main__":

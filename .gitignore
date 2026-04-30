@@ -6,3 +6,9 @@ wallet.json
 data/portfolio_local.json
 .venv/
 exports/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/

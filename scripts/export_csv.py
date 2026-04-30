@@ -25,13 +25,15 @@ Usage:
   python3 scripts/export_csv.py --since 2026-04-20T00:00:00Z
   python3 scripts/export_csv.py --quiet
 """
+
 from __future__ import annotations
+
 import argparse
 import csv
 import json
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -40,11 +42,13 @@ SETTLED_FILE = REPO_ROOT / "data" / "kite_settled.json"
 LIVE_PORTFOLIO = Path.home() / ".hermes" / "brain" / "paper_portfolio.json"
 DEFAULT_OUTPUT = REPO_ROOT / "exports"
 
-sys.path.insert(0, str(REPO_ROOT / "funds"))
+# engine.policy is optional — CSV export works on raw JSON without it.
+# Self-bootstrap when the script is run directly without `pip install -e .`.
+sys.path.insert(0, str(REPO_ROOT))
 try:
-    import policy   # type: ignore
-except Exception:
-    policy = None   # policy module is optional — exporter works standalone
+    from engine import policy  # type: ignore
+except Exception:  # pragma: no cover
+    policy = None
 
 
 def load_json(path: Path, default):
@@ -69,7 +73,7 @@ def epoch_to_iso(ts) -> str:
     if not ts:
         return ""
     try:
-        return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
+        return datetime.fromtimestamp(float(ts), tz=UTC).isoformat()
     except Exception:
         return str(ts)
 
@@ -86,13 +90,21 @@ def _fund_capital(fund_id: str, default: float = 1000.0) -> float:
 
 # ---------- writers ----------
 
+
 def write_funds_csv(out: Path, summary: dict, quiet: bool):
     sleeves = summary.get("sleeves", {})
-    fund_agg = defaultdict(lambda: {
-        "target_usd": 0.0, "open_exposure_usd": 0.0, "staked_usd": 0.0,
-        "pnl_usd": 0.0, "positions_total": 0, "resolved": 0,
-        "funded_sleeves": 0, "total_sleeves": 0,
-    })
+    fund_agg = defaultdict(
+        lambda: {
+            "target_usd": 0.0,
+            "open_exposure_usd": 0.0,
+            "staked_usd": 0.0,
+            "pnl_usd": 0.0,
+            "positions_total": 0,
+            "resolved": 0,
+            "funded_sleeves": 0,
+            "total_sleeves": 0,
+        }
+    )
     for sid, s in sleeves.items():
         fid = sleeve_fund(sid)
         agg = fund_agg[fid]
@@ -113,20 +125,22 @@ def write_funds_csv(out: Path, summary: dict, quiet: bool):
         if policy is not None:
             name = policy.fund_cfg(fid).get("name", "")
         coverage = (a["funded_sleeves"] / a["total_sleeves"] * 100) if a["total_sleeves"] else 0
-        rows.append({
-            "fund_id": fid,
-            "name": name,
-            "capital_usd": round(cap, 2),
-            "target_usd": round(a["target_usd"], 2),
-            "open_exposure_usd": round(a["open_exposure_usd"], 2),
-            "staked_usd": round(a["staked_usd"], 2),
-            "pnl_usd": round(a["pnl_usd"], 2),
-            "positions_total": a["positions_total"],
-            "resolved": a["resolved"],
-            "funded_sleeves": a["funded_sleeves"],
-            "total_sleeves": a["total_sleeves"],
-            "coverage_pct": round(coverage, 1),
-        })
+        rows.append(
+            {
+                "fund_id": fid,
+                "name": name,
+                "capital_usd": round(cap, 2),
+                "target_usd": round(a["target_usd"], 2),
+                "open_exposure_usd": round(a["open_exposure_usd"], 2),
+                "staked_usd": round(a["staked_usd"], 2),
+                "pnl_usd": round(a["pnl_usd"], 2),
+                "positions_total": a["positions_total"],
+                "resolved": a["resolved"],
+                "funded_sleeves": a["funded_sleeves"],
+                "total_sleeves": a["total_sleeves"],
+                "coverage_pct": round(coverage, 1),
+            }
+        )
 
     path = out / "funds.csv"
     with path.open("w", newline="") as f:
@@ -143,23 +157,25 @@ def write_sleeves_csv(out: Path, summary: dict, fund_filter: str | None, quiet: 
         fid = sleeve_fund(sid)
         if fund_filter and fid != fund_filter:
             continue
-        rows.append({
-            "sleeve_id": sid,
-            "fund_id": fid,
-            "sleeve": sid.split(".", 1)[1] if "." in sid else sid,
-            "target_pct": s.get("target_pct"),
-            "target_usd": s.get("target_usd"),
-            "open_exposure_usd": s.get("open_exposure_usd"),
-            "drift_pct": s.get("drift_pct"),
-            "positions_total": s.get("positions_total"),
-            "resolved": s.get("resolved"),
-            "win_rate_pct": s.get("win_rate_pct"),
-            "pnl_usd": s.get("pnl_usd"),
-            "staked_usd": s.get("staked_usd"),
-            "funded": s.get("funded"),
-            "workers_configured": "|".join(s.get("workers_configured") or []),
-            "workers_shipping": "|".join(s.get("workers_shipping") or []),
-        })
+        rows.append(
+            {
+                "sleeve_id": sid,
+                "fund_id": fid,
+                "sleeve": sid.split(".", 1)[1] if "." in sid else sid,
+                "target_pct": s.get("target_pct"),
+                "target_usd": s.get("target_usd"),
+                "open_exposure_usd": s.get("open_exposure_usd"),
+                "drift_pct": s.get("drift_pct"),
+                "positions_total": s.get("positions_total"),
+                "resolved": s.get("resolved"),
+                "win_rate_pct": s.get("win_rate_pct"),
+                "pnl_usd": s.get("pnl_usd"),
+                "staked_usd": s.get("staked_usd"),
+                "funded": s.get("funded"),
+                "workers_configured": "|".join(s.get("workers_configured") or []),
+                "workers_shipping": "|".join(s.get("workers_shipping") or []),
+            }
+        )
     rows.sort(key=lambda r: (r["fund_id"], r["sleeve"]))
 
     path = out / "sleeves.csv"
@@ -194,40 +210,56 @@ def _position_rows(live: dict, fund_filter: str | None, since: datetime | None):
                 continue
         resolve_ts = p.get("resolve_time")
         resolve_iso = resolve_ts if isinstance(resolve_ts, str) else epoch_to_iso(resolve_ts)
-        rows.append({
-            "id": p.get("id", ""),
-            "worker": p.get("worker", ""),
-            "fund_id": fund_id,
-            "sleeve_id": sleeve,
-            "symbol": p.get("symbol", ""),
-            "direction": p.get("direction", p.get("side", "")),
-            "entry_price": p.get("entry_price"),
-            "mark_price": p.get("mark_price") or p.get("last_price"),
-            "exit_price": p.get("exit_price"),
-            "size_usd": p.get("size_usd"),
-            "principal_usd": p.get("principal_usd"),
-            "pnl_usd": p.get("pnl_usd"),
-            "pnl_pct": p.get("pnl_pct"),
-            "resolved": bool(p.get("resolved")),
-            "correct": p.get("correct"),
-            "resolve_reason": p.get("resolve_reason", ""),
-            "entry_time": entry_iso,
-            "resolve_time": resolve_iso,
-        })
+        rows.append(
+            {
+                "id": p.get("id", ""),
+                "worker": p.get("worker", ""),
+                "fund_id": fund_id,
+                "sleeve_id": sleeve,
+                "symbol": p.get("symbol", ""),
+                "direction": p.get("direction", p.get("side", "")),
+                "entry_price": p.get("entry_price"),
+                "mark_price": p.get("mark_price") or p.get("last_price"),
+                "exit_price": p.get("exit_price"),
+                "size_usd": p.get("size_usd"),
+                "principal_usd": p.get("principal_usd"),
+                "pnl_usd": p.get("pnl_usd"),
+                "pnl_pct": p.get("pnl_pct"),
+                "resolved": bool(p.get("resolved")),
+                "correct": p.get("correct"),
+                "resolve_reason": p.get("resolve_reason", ""),
+                "entry_time": entry_iso,
+                "resolve_time": resolve_iso,
+            }
+        )
     rows.sort(key=lambda r: (r["fund_id"], r["sleeve_id"], r["entry_time"]))
     return rows
 
 
-def write_positions_csv(out: Path, live: dict, fund_filter: str | None,
-                        since: datetime | None, quiet: bool):
+def write_positions_csv(
+    out: Path, live: dict, fund_filter: str | None, since: datetime | None, quiet: bool
+):
     rows = _position_rows(live, fund_filter, since)
     path = out / "positions.csv"
     fields = [
-        "id", "worker", "fund_id", "sleeve_id", "symbol", "direction",
-        "entry_price", "mark_price", "exit_price",
-        "size_usd", "principal_usd", "pnl_usd", "pnl_pct",
-        "resolved", "correct", "resolve_reason",
-        "entry_time", "resolve_time",
+        "id",
+        "worker",
+        "fund_id",
+        "sleeve_id",
+        "symbol",
+        "direction",
+        "entry_price",
+        "mark_price",
+        "exit_price",
+        "size_usd",
+        "principal_usd",
+        "pnl_usd",
+        "pnl_pct",
+        "resolved",
+        "correct",
+        "resolve_reason",
+        "entry_time",
+        "resolve_time",
     ]
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
@@ -238,16 +270,28 @@ def write_positions_csv(out: Path, live: dict, fund_filter: str | None,
         print(f"  wrote {path} ({len(rows)} rows)")
 
 
-def write_trades_csv(out: Path, live: dict, fund_filter: str | None,
-                     since: datetime | None, quiet: bool):
+def write_trades_csv(
+    out: Path, live: dict, fund_filter: str | None, since: datetime | None, quiet: bool
+):
     rows = [r for r in _position_rows(live, fund_filter, since) if r["resolved"]]
     path = out / "trades.csv"
     fields = [
-        "id", "worker", "fund_id", "sleeve_id", "symbol", "direction",
-        "entry_price", "exit_price",
-        "principal_usd", "size_usd", "pnl_usd", "pnl_pct",
-        "correct", "resolve_reason",
-        "entry_time", "resolve_time",
+        "id",
+        "worker",
+        "fund_id",
+        "sleeve_id",
+        "symbol",
+        "direction",
+        "entry_price",
+        "exit_price",
+        "principal_usd",
+        "size_usd",
+        "pnl_usd",
+        "pnl_pct",
+        "correct",
+        "resolve_reason",
+        "entry_time",
+        "resolve_time",
     ]
     with path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
@@ -266,13 +310,15 @@ def write_settlements_csv(out: Path, settled: dict, fund_filter: str | None, qui
         fid = sleeve_fund(sleeve)
         if fund_filter and fid and fid != fund_filter:
             continue
-        rows.append({
-            "nonce": t.get("nonce"),
-            "sleeve_id": sleeve,
-            "fund_id": fid,
-            "tx_hash": t.get("tx", ""),
-            "content_hash": t.get("content_hash", ""),
-        })
+        rows.append(
+            {
+                "nonce": t.get("nonce"),
+                "sleeve_id": sleeve,
+                "fund_id": fid,
+                "tx_hash": t.get("tx", ""),
+                "content_hash": t.get("content_hash", ""),
+            }
+        )
     rows.sort(key=lambda r: r.get("nonce") or 0)
     path = out / "settlements.csv"
     fields = ["nonce", "sleeve_id", "fund_id", "tx_hash", "content_hash"]
@@ -286,12 +332,24 @@ def write_settlements_csv(out: Path, settled: dict, fund_filter: str | None, qui
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT,
-                    help="Directory to write CSV files (default: ./exports/)")
-    ap.add_argument("--fund", type=str, default=None,
-                    help="Filter to a single fund_id (e.g. fund_75_25_balanced)")
-    ap.add_argument("--since", type=str, default=None,
-                    help="ISO timestamp — only include positions/trades at or after this time")
+    ap.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT,
+        help="Directory to write CSV files (default: ./exports/)",
+    )
+    ap.add_argument(
+        "--fund",
+        type=str,
+        default=None,
+        help="Filter to a single fund_id (e.g. fund_75_25_balanced)",
+    )
+    ap.add_argument(
+        "--since",
+        type=str,
+        default=None,
+        help="ISO timestamp — only include positions/trades at or after this time",
+    )
     ap.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
@@ -318,7 +376,7 @@ def main():
 
     # Drop a tiny manifest for reconciliation
     manifest = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "source_snapshot_as_of": summary.get("as_of"),
         "fund_filter": args.fund,
         "since": args.since,

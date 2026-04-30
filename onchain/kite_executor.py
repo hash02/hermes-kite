@@ -14,12 +14,15 @@ supply call on Kite-deployed DeFi contracts.
 
 grab() the pending settlement. run() the tx. Write state. Sleep.
 """
+
 from __future__ import annotations
+
 import hashlib
 import json
 import os
 import sys
 from pathlib import Path
+
 from web3 import Web3
 
 KITE_RPC = os.environ.get("KITE_RPC", "https://rpc-testnet.gokite.ai/")
@@ -54,7 +57,10 @@ def sleeve_hash(sleeve_name: str, position: dict) -> str:
 
 def main():
     if not PRIV_KEY:
-        print("ERROR: set KITE_PRIVATE_KEY env var (fund via https://faucet.gokite.ai/)", file=sys.stderr)
+        print(
+            "ERROR: set KITE_PRIVATE_KEY env var (fund via https://faucet.gokite.ai/)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     w3 = Web3(Web3.HTTPProvider(KITE_RPC))
@@ -93,7 +99,7 @@ def main():
     nonce = w3.eth.get_transaction_count(acct.address)
     gas_price = w3.eth.gas_price
 
-    for name, pos, h in pending:
+    for name, _pos, h in pending:
         data = f"hermes-kite:{agent_id}:{name}:{h}".encode().hex()
         tx = {
             "to": acct.address,  # self-send marker
@@ -108,12 +114,14 @@ def main():
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         print(f"[kite] settled sleeve={name}  tx={tx_hash.hex()}")
         settled["hashes"][name] = h
-        settled.setdefault("txs", []).append({
-            "sleeve": name,
-            "tx": tx_hash.hex(),
-            "content_hash": h,
-            "nonce": nonce,
-        })
+        settled.setdefault("txs", []).append(
+            {
+                "sleeve": name,
+                "tx": tx_hash.hex(),
+                "content_hash": h,
+                "nonce": nonce,
+            }
+        )
         nonce += 1
 
     dump_json(SETTLED_FILE, settled)
