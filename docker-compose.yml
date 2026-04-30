@@ -1,0 +1,47 @@
+# Local dev convenience. Build once, run any worker or ops script.
+#
+#   docker compose build
+#   docker compose run --rm dev                          # full test suite
+#   docker compose run --rm worker                       # default: aave_usdc_worker
+#   docker compose run --rm -e HERMES_WORKER=delta_neutral worker
+#   docker compose run --rm reconcile                    # book-only reconcile
+#
+# All services share a named volume `hermes-state` mounted at /home/hermes/.hermes
+# so the paper portfolio + status files persist across runs.
+
+services:
+  dev:
+    build: .
+    image: hermes-kite:dev
+    command: python -m unittest discover tests
+    environment:
+      HERMES_LOG_FORMAT: text
+      HERMES_LOG_LEVEL: DEBUG
+    volumes:
+      - hermes-state:/home/hermes/.hermes
+      - ./:/app:ro
+
+  worker:
+    image: hermes-kite:dev
+    environment:
+      HERMES_WORKER: aave_usdc
+      HERMES_LOG_FORMAT: json
+      KITE_PRIVATE_KEY: ${KITE_PRIVATE_KEY:-}
+    volumes:
+      - hermes-state:/home/hermes/.hermes
+
+  reconcile:
+    image: hermes-kite:dev
+    command: python -m scripts.reconcile --skip-onchain --json
+    volumes:
+      - hermes-state:/home/hermes/.hermes
+      - ./data:/app/data:ro
+
+  watchdog:
+    image: hermes-kite:dev
+    command: python -m scripts.watchdog --max-age 60 --json
+    volumes:
+      - hermes-state:/home/hermes/.hermes
+
+volumes:
+  hermes-state:
