@@ -115,7 +115,7 @@ def compute_fund_status(fund_id: str, fund_cfg: dict, positions: list, capital: 
         for w in sleeve["workers"]:
             worker_to_sleeve[w] = sleeve_id
 
-    sleeve_agg = defaultdict(
+    sleeve_agg: defaultdict[str, dict[str, float]] = defaultdict(
         lambda: {
             "positions": 0,
             "resolved": 0,
@@ -149,10 +149,10 @@ def compute_fund_status(fund_id: str, fund_cfg: dict, positions: list, capital: 
             s["open_exposure_usd"] += p.get("size_usd", 0)
 
     # Compose sleeve output with drift + funding status
-    sleeves_out = {}
+    sleeves_out: dict[str, dict] = {}
     total_pnl = 0.0
-    total_resolved = 0
-    total_wins = 0
+    total_resolved = 0.0
+    total_wins = 0.0
     total_staked = 0.0
     funded_sleeves = 0
     for sleeve_id, sleeve_cfg in fund_cfg["sleeves"].items():

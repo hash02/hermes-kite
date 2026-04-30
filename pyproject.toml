@@ -73,7 +73,9 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.11"
 strict = false
-warn_return_any = true
+# `warn_return_any` is too noisy with JSON-heavy code (json.loads returns Any
+# and propagates through every loader). Re-enable when we cast at call sites.
+warn_return_any = false
 warn_unused_configs = true
 ignore_missing_imports = true   # web3 stubs are flaky; fine for now
 disallow_untyped_defs = false   # too aggressive for the worker fleet

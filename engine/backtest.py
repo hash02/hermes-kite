@@ -204,7 +204,7 @@ def _compute_metrics(equity: list[float], daily_returns: list[float], days: int)
 
 def _counterparty_exposure_from_sizes(fund_id: str, sizes: dict, capital: float) -> dict:
     """sizes: {(fund_id, sleeve_short, worker): usd}. Return {cp: pct_of_capital}."""
-    out = defaultdict(float)
+    out: defaultdict[str, float] = defaultdict(float)
     if capital <= 0:
         return dict(out)
     for (fid, _sleeve, worker), usd in sizes.items():
@@ -266,8 +266,8 @@ def _simulate_one(
         for fid, f in policy_snapshot.get("funds", {}).items()
     }
 
-    fund_equity = {fid: [cap] for fid, cap in fund_capitals.items()}
-    fund_daily_rets = {fid: [] for fid in fund_capitals}
+    fund_equity: dict[str, list[float]] = {fid: [cap] for fid, cap in fund_capitals.items()}
+    fund_daily_rets: dict[str, list[float]] = {fid: [] for fid in fund_capitals}
     fund_cum_pnl = {fid: 0.0 for fid in fund_capitals}
 
     # Pre-draw daily returns per leg — independent samples (no correlation).
@@ -297,7 +297,7 @@ def _simulate_one(
             )
             today_sizes[(leg.fund_id, leg.sleeve_short, leg.worker)] = sz
 
-        day_pnl_by_fund = defaultdict(float)
+        day_pnl_by_fund: defaultdict[str, float] = defaultdict(float)
         for leg in legs:
             key = (leg.fund_id, leg.sleeve_short, leg.worker)
             sz = today_sizes[key]
@@ -339,10 +339,10 @@ def _pctl(values: list[float], p: float) -> float:
 
 def _aggregate(per_sim: list[dict], metric_keys: list[str]) -> dict:
     """Aggregate a list of per-sim per-fund metrics into p5/p50/p95 + mean."""
-    all_fids = set()
+    all_fids: set[str] = set()
     for r in per_sim:
         all_fids.update(r.keys())
-    agg = {}
+    agg: dict[str, dict] = {}
     for fid in sorted(all_fids):
         agg[fid] = {}
         for key in metric_keys:
@@ -477,7 +477,7 @@ def _write_outputs(result: dict, out_dir: Path, tag: str):
             w.writerow(["day"] + [f"sim_{i}" for i in range(ncols)])
             max_len = max(len(c) for c in curves)
             for d in range(max_len):
-                row = [d]
+                row: list = [d]
                 for c in curves:
                     row.append(c[d] if d < len(c) else "")
                 w.writerow(row)

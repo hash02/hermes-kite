@@ -87,7 +87,7 @@ def sleeve_targets_for(worker_name: str) -> dict:
         return static
     # Lazy import — avoids a circular dependency at module load.
     try:
-        from engine.risk_engine import apply_engine  # type: ignore[no-redef]
+        from engine.risk_engine import apply_engine
     except ImportError:
         return static
     try:

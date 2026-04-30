@@ -134,7 +134,7 @@ def _upsert_sleeve_position(pf, cfg: YieldConfig, sleeve_id: str, principal: flo
         positions.append(position)
         existing = position
     else:
-        last = existing.get("last_update", existing.get("entry_time", now))
+        last = float(existing.get("last_update") or existing.get("entry_time") or now)
         prior_principal = existing.get("principal_usd", principal)
         if prior_principal != principal:
             accrued_so_far = existing.get("size_usd", prior_principal) - prior_principal
