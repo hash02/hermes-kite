@@ -8,7 +8,9 @@ sizes + grid band come from config/policy.json; fallback defaults below.
 
 Paper only. R-001 compliant (Binance public endpoints, no key).
 """
+
 from __future__ import annotations
+
 from grid_base import GridConfig, run_grid
 from policy import sleeve_targets_for, worker_cfg
 

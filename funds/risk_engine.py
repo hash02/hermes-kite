@@ -27,12 +27,13 @@ CLI:
   python3 funds/risk_engine.py --enable               # flip engine_enabled=true in policy
   python3 funds/risk_engine.py --disable              # flip engine_enabled=false
 """
+
 from __future__ import annotations
+
 import argparse
 import json
 import math
 import statistics
-import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -45,43 +46,44 @@ PORTFOLIO_SUMMARY = REPO_ROOT / "data" / "portfolio_summary.json"
 # Used when there are no resolved positions yet to estimate from history.
 # Numbers are pragmatic — conservative rather than optimistic.
 _BOOTSTRAP_VOL_PCT = {
-    "yield":           1.0,     # stablecoin lending — smart-contract risk dominates vol
-    "delta_neutral":   3.0,     # funding-rate arb, risk mostly from unwind slippage
-    "grid":            8.0,     # spot grid on ETH/BTC — vol of the underlying * grid fraction
-    "grid_stables":    0.5,     # USDC/USDT pair rarely moves
-    "directional":    25.0,     # single-asset directional crypto
-    "momentum":       25.0,     # equivalent to directional
-    "binary":         40.0,     # polymarket NO-longshot — binary resolution
-    "tokenized_stock": 20.0,    # tokenized equity, similar to US blue chips
-    "memecoin":       80.0,     # large-cap memecoin — fat-tail downside
-    "sniper":        120.0,     # new-token sniper — asymmetric, brutal
-    "default":        15.0,
+    "yield": 1.0,  # stablecoin lending — smart-contract risk dominates vol
+    "delta_neutral": 3.0,  # funding-rate arb, risk mostly from unwind slippage
+    "grid": 8.0,  # spot grid on ETH/BTC — vol of the underlying * grid fraction
+    "grid_stables": 0.5,  # USDC/USDT pair rarely moves
+    "directional": 25.0,  # single-asset directional crypto
+    "momentum": 25.0,  # equivalent to directional
+    "binary": 40.0,  # polymarket NO-longshot — binary resolution
+    "tokenized_stock": 20.0,  # tokenized equity, similar to US blue chips
+    "memecoin": 80.0,  # large-cap memecoin — fat-tail downside
+    "sniper": 120.0,  # new-token sniper — asymmetric, brutal
+    "default": 15.0,
 }
 
 # Classify each worker -> strategy category. Used for bootstrap vol lookup
 # and counterparty attribution.
 _WORKER_META = {
-    "aave_usdc":             {"category": "yield",            "counterparty": "aave_v3"},
-    "morpho_usdc":           {"category": "yield",            "counterparty": "morpho_blue"},
-    "euler_pyusd":           {"category": "yield",            "counterparty": "euler_v2"},
-    "sgho":                  {"category": "yield",            "counterparty": "aave_savings"},
-    "superstate_uscc":       {"category": "yield",            "counterparty": "superstate"},
-    "delta_neutral_funding": {"category": "delta_neutral",    "counterparty": "binance_perp"},
-    "polymarket_btc_updown": {"category": "binary",           "counterparty": "polymarket"},
-    "pyth_momentum":         {"category": "directional",      "counterparty": "pyth_oracle"},
-    "grid_eth_usdc":         {"category": "grid",             "counterparty": "binance_spot"},
-    "grid_btc_usdc":         {"category": "grid",             "counterparty": "binance_spot"},
-    "grid_sol":              {"category": "grid",             "counterparty": "binance_spot"},
-    "grid_stables":          {"category": "grid_stables",     "counterparty": "binance_spot"},
-    "tv_momentum":           {"category": "momentum",         "counterparty": "binance_spot"},
-    "xstocks_directional":   {"category": "tokenized_stock",  "counterparty": "backed_xstocks"},
-    "xstocks_grid":          {"category": "tokenized_stock",  "counterparty": "backed_xstocks"},
-    "crypto_memecoins":      {"category": "memecoin",         "counterparty": "coingecko_cex"},
-    "wow_sniper_base":       {"category": "sniper",           "counterparty": "base_dex"},
+    "aave_usdc": {"category": "yield", "counterparty": "aave_v3"},
+    "morpho_usdc": {"category": "yield", "counterparty": "morpho_blue"},
+    "euler_pyusd": {"category": "yield", "counterparty": "euler_v2"},
+    "sgho": {"category": "yield", "counterparty": "aave_savings"},
+    "superstate_uscc": {"category": "yield", "counterparty": "superstate"},
+    "delta_neutral_funding": {"category": "delta_neutral", "counterparty": "binance_perp"},
+    "polymarket_btc_updown": {"category": "binary", "counterparty": "polymarket"},
+    "pyth_momentum": {"category": "directional", "counterparty": "pyth_oracle"},
+    "grid_eth_usdc": {"category": "grid", "counterparty": "binance_spot"},
+    "grid_btc_usdc": {"category": "grid", "counterparty": "binance_spot"},
+    "grid_sol": {"category": "grid", "counterparty": "binance_spot"},
+    "grid_stables": {"category": "grid_stables", "counterparty": "binance_spot"},
+    "tv_momentum": {"category": "momentum", "counterparty": "binance_spot"},
+    "xstocks_directional": {"category": "tokenized_stock", "counterparty": "backed_xstocks"},
+    "xstocks_grid": {"category": "tokenized_stock", "counterparty": "backed_xstocks"},
+    "crypto_memecoins": {"category": "memecoin", "counterparty": "coingecko_cex"},
+    "wow_sniper_base": {"category": "sniper", "counterparty": "base_dex"},
 }
 
 
 # ---------- policy / data loaders ----------
+
 
 def _load_policy() -> dict:
     if not POLICY_FILE.exists():
@@ -112,6 +114,7 @@ def _load_summary() -> dict:
 
 
 # ---------- realized vol ----------
+
 
 def realized_vol_pct(sleeve_id: str, worker_name: str, positions: list) -> float:
     """
@@ -152,6 +155,7 @@ def realized_vol_pct(sleeve_id: str, worker_name: str, positions: list) -> float
 
 # ---------- drawdown ----------
 
+
 def fund_drawdown_pct(fund_id: str, summary: dict) -> float:
     """Current drawdown = cumulative fund PnL / fund capital (%)."""
     capital = _load_policy().get("funds", {}).get(fund_id, {}).get("capital_usd", 1000.0)
@@ -165,6 +169,7 @@ def fund_drawdown_pct(fund_id: str, summary: dict) -> float:
 
 
 # ---------- concentration ----------
+
 
 def counterparty_exposure_pct(fund_id: str, policy: dict) -> dict:
     """Return {counterparty: % of fund capital} for every counterparty in this fund."""
@@ -183,9 +188,15 @@ def counterparty_exposure_pct(fund_id: str, policy: dict) -> dict:
 
 # ---------- core sizing ----------
 
+
 def _sized_for_sleeve(
-    fund_id: str, sleeve_id_short: str, worker_name: str, static_usd: float,
-    policy: dict, positions: list, summary: dict,
+    fund_id: str,
+    sleeve_id_short: str,
+    worker_name: str,
+    static_usd: float,
+    policy: dict,
+    positions: list,
+    summary: dict,
 ) -> tuple[float, dict]:
     """
     Return (sized_usd, attribution_dict) for a single sleeve.
@@ -268,14 +279,20 @@ def apply_engine(worker_name: str, static_targets: dict) -> dict:
         else:
             fund_id, sleeve_short = "", sleeve_key
         sized, _ = _sized_for_sleeve(
-            fund_id, sleeve_short, worker_name, float(static_usd),
-            policy, positions, summary,
+            fund_id,
+            sleeve_short,
+            worker_name,
+            float(static_usd),
+            policy,
+            positions,
+            summary,
         )
         out[sleeve_key] = round(sized, 4)
     return out
 
 
 # ---------- CLI ----------
+
 
 def _print_table(worker_names: list[str], engine_on: bool):
     policy = _load_policy()
@@ -294,14 +311,19 @@ def _print_table(worker_names: list[str], engine_on: bool):
     for fund_id in policy.get("funds", {}):
         dd = fund_drawdown_pct(fund_id, summary)
         exposures = counterparty_exposure_pct(fund_id, policy)
-        print(f"== {fund_id}  capital=${policy['funds'][fund_id].get('capital_usd', 0):.0f}  drawdown={dd:+.2f}%")
-        print(f"   counterparty exposure: " + ", ".join(
-            f"{cp}={pct:.1f}%" for cp, pct in sorted(exposures.items(), key=lambda x: -x[1])
-        ))
+        print(
+            f"== {fund_id}  capital=${policy['funds'][fund_id].get('capital_usd', 0):.0f}  drawdown={dd:+.2f}%"
+        )
+        print(
+            "   counterparty exposure: "
+            + ", ".join(f"{cp}={pct:.1f}%" for cp, pct in sorted(exposures.items(), key=lambda x: -x[1]))
+        )
 
     print()
     hdr = ("worker", "fund", "sleeve", "static", "vol%", "vol_cap", "kelly", "dd_halt", "cp×", "sized")
-    print(f"{hdr[0]:<22} {hdr[1]:<22} {hdr[2]:<22} {hdr[3]:>8} {hdr[4]:>6} {hdr[5]:>10} {hdr[6]:>6} {hdr[7]:>7} {hdr[8]:>6} {hdr[9]:>10}")
+    print(
+        f"{hdr[0]:<22} {hdr[1]:<22} {hdr[2]:<22} {hdr[3]:>8} {hdr[4]:>6} {hdr[5]:>10} {hdr[6]:>6} {hdr[7]:>7} {hdr[8]:>6} {hdr[9]:>10}"
+    )
     print("-" * 130)
     for wn in worker_names:
         # Read the raw policy values directly — do NOT go through
@@ -312,14 +334,21 @@ def _print_table(worker_names: list[str], engine_on: bool):
         for sk, static_usd in static.items():
             fund_id, sleeve_short = sk.split(".", 1) if "." in sk else ("", sk)
             sized, attr = _sized_for_sleeve(
-                fund_id, sleeve_short, wn, float(static_usd),
-                policy, positions, summary,
+                fund_id,
+                sleeve_short,
+                wn,
+                float(static_usd),
+                policy,
+                positions,
+                summary,
             )
             # If engine disabled, sized prints as the static value
             display_sized = sized if engine_on else float(static_usd)
-            vol_cap_s = f"${attr['vol_cap_usd']:,.0f}" if attr['vol_cap_usd'] is not None else "     inf"
-            dd_s = "YES" if attr['halted_on_drawdown'] else "no"
-            print(f"{wn:<22} {fund_id:<22} {sleeve_short:<22} ${static_usd:>7.2f} {attr['realized_vol_pct']:>5.1f}% {vol_cap_s:>10} {attr['kelly_fraction']:>6.2f} {dd_s:>7} {attr['counterparty_scalar']:>5.2f}× ${display_sized:>9.2f}")
+            vol_cap_s = f"${attr['vol_cap_usd']:,.0f}" if attr["vol_cap_usd"] is not None else "     inf"
+            dd_s = "YES" if attr["halted_on_drawdown"] else "no"
+            print(
+                f"{wn:<22} {fund_id:<22} {sleeve_short:<22} ${static_usd:>7.2f} {attr['realized_vol_pct']:>5.1f}% {vol_cap_s:>10} {attr['kelly_fraction']:>6.2f} {dd_s:>7} {attr['counterparty_scalar']:>5.2f}× ${display_sized:>9.2f}"
+            )
     print()
 
 
@@ -331,7 +360,11 @@ def _static_sleeve_targets_direct(policy: dict, worker_name: str) -> dict:
             entry = sleeve.get("workers", {}).get(worker_name)
             if not entry:
                 continue
-            val = entry.get("principal_usd") or entry.get("target_deployment_usd") or entry.get("principal_usd_per_symbol")
+            val = (
+                entry.get("principal_usd")
+                or entry.get("target_deployment_usd")
+                or entry.get("principal_usd_per_symbol")
+            )
             if val is None:
                 continue
             out[f"{fund_id}.{sleeve_id}"] = float(val)
@@ -350,10 +383,12 @@ def main():
     ap.add_argument("--show", action="store_true", help="Print per-worker sizing table")
     ap.add_argument("--enable", action="store_true", help="Flip engine_enabled=true in policy.json")
     ap.add_argument("--disable", action="store_true", help="Flip engine_enabled=false in policy.json")
-    ap.add_argument("--enable-preview", action="store_true",
-                    help="Show sizing as if the engine were enabled (without flipping the flag)")
-    ap.add_argument("--worker", action="append", default=None,
-                    help="Restrict --show to specific worker(s)")
+    ap.add_argument(
+        "--enable-preview",
+        action="store_true",
+        help="Show sizing as if the engine were enabled (without flipping the flag)",
+    )
+    ap.add_argument("--worker", action="append", default=None, help="Restrict --show to specific worker(s)")
     args = ap.parse_args()
 
     if args.enable:
@@ -365,7 +400,9 @@ def main():
 
     if args.show or args.enable_preview:
         workers = args.worker or list(_WORKER_META.keys())
-        engine_on = True if args.enable_preview else _load_policy().get("risk", {}).get("engine_enabled", False)
+        engine_on = (
+            True if args.enable_preview else _load_policy().get("risk", {}).get("engine_enabled", False)
+        )
         _print_table(workers, engine_on)
         return
 

@@ -5,7 +5,9 @@ grid_sol -- spot grid trader on SOL/USDC (Binance public spot).
 Covers aggressive_grid (90/10 only — SOL vol fits the growth fund risk
 budget). Thin config on grid_base.py; policy-driven.
 """
+
 from __future__ import annotations
+
 from grid_base import GridConfig, run_grid
 from policy import sleeve_targets_for, worker_cfg
 

@@ -9,17 +9,19 @@ portfolio persistence, status emission — live here.
 
 Not a worker on its own. Import-only.
 """
+
 from __future__ import annotations
+
 import json
 import logging
 import os
 import statistics
 import time
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
 
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
@@ -30,12 +32,12 @@ UA = {"User-Agent": "hermes-grid-base/1.0"}
 @dataclass
 class GridConfig:
     worker_name: str
-    symbol: str                       # Display symbol (e.g. "ETHUSDC", "USDCUSDT")
-    price_url: str                    # JSON endpoint returning {"price": "..."}
-    klines_url: str                   # JSON endpoint returning list of kline rows
-    sleeve_targets: dict              # {"fund_xxx.sleeve": usd_target}
-    grid_half: int = 5                # 5 levels each side of pivot
-    grid_band_pct: float = 0.06       # ±6% band
+    symbol: str  # Display symbol (e.g. "ETHUSDC", "USDCUSDT")
+    price_url: str  # JSON endpoint returning {"price": "..."}
+    klines_url: str  # JSON endpoint returning list of kline rows
+    sleeve_targets: dict  # {"fund_xxx.sleeve": usd_target}
+    grid_half: int = 5  # 5 levels each side of pivot
+    grid_band_pct: float = 0.06  # ±6% band
     price_field_parser: Callable[[dict], float] | None = None
     kline_close_parser: Callable[[list], float] | None = None
     status_file: Path = field(init=False)
@@ -47,6 +49,7 @@ class GridConfig:
 
 
 # ---------- fetch ----------
+
 
 def _http_json(url: str):
     req = urllib.request.Request(url, headers=UA)
@@ -83,6 +86,7 @@ def fetch_pivot(cfg: GridConfig, log) -> float | None:
 
 # ---------- grid geometry ----------
 
+
 def build_levels(pivot: float, grid_half: int, band_pct: float) -> list[float]:
     step = (band_pct * pivot) / grid_half
     levels = []
@@ -95,10 +99,16 @@ def build_levels(pivot: float, grid_half: int, band_pct: float) -> list[float]:
 
 # ---------- portfolio plumbing ----------
 
+
 def load_portfolio():
     if not PORTFOLIO_FILE.exists():
-        return {"positions": [], "realized_pnl": 0.0, "total_trades": 0,
-                "correct_trades": 0, "starting_capital": 10000.0}
+        return {
+            "positions": [],
+            "realized_pnl": 0.0,
+            "total_trades": 0,
+            "correct_trades": 0,
+            "starting_capital": 10000.0,
+        }
     try:
         return json.loads(PORTFOLIO_FILE.read_text())
     except Exception:
@@ -144,6 +154,7 @@ def positions_for_sleeve(positions, worker_name, sleeve_id, open_only=True):
 
 # ---------- fill + resolve ----------
 
+
 def _fire_fill(positions, cfg, sleeve_id, level, mark, side, size_usd, now_iso):
     fund_id = sleeve_id.split(".", 1)[0]
     pos_id = f"{cfg.worker_name}:{sleeve_id}:{side}:{level:.6f}:{int(time.time() * 1000)}"
@@ -181,16 +192,20 @@ def _resolve_round_trip(buy_pos, sell_level, now_iso):
     buy_pos["resolve_reason"] = "grid_round_trip"
 
 
-def step_sleeve(positions, state, cfg: GridConfig, sleeve_id, target_usd,
-                mark, pivot, now_iso, log):
+def step_sleeve(positions, state, cfg: GridConfig, sleeve_id, target_usd, mark, pivot, now_iso, log):
     sleeve_state = state.setdefault(sleeve_id, {})
     levels = sleeve_state.get("levels")
     if not levels or sleeve_state.get("pivot") != pivot:
         levels = build_levels(pivot, cfg.grid_half, cfg.grid_band_pct)
         sleeve_state["levels"] = levels
         sleeve_state["pivot"] = pivot
-        log.info("[%s] grid (re)built pivot=%.6f levels=%d band=±%.1f%%",
-                 sleeve_id, pivot, len(levels), cfg.grid_band_pct * 100)
+        log.info(
+            "[%s] grid (re)built pivot=%.6f levels=%d band=±%.1f%%",
+            sleeve_id,
+            pivot,
+            len(levels),
+            cfg.grid_band_pct * 100,
+        )
 
     last_mark = sleeve_state.get("last_mark", mark)
     sleeve_state["last_mark"] = mark
@@ -202,8 +217,9 @@ def step_sleeve(positions, state, cfg: GridConfig, sleeve_id, target_usd,
     crossed = [lvl for lvl in levels if lo < lvl < hi or last_mark == lvl == mark]
     going_up = mark > last_mark
 
-    open_buys = [p for p in positions_for_sleeve(positions, cfg.worker_name, sleeve_id)
-                 if p.get("side") == "buy"]
+    open_buys = [
+        p for p in positions_for_sleeve(positions, cfg.worker_name, sleeve_id) if p.get("side") == "buy"
+    ]
     open_buys.sort(key=lambda p: p["entry_price"])
 
     order = sorted(crossed) if going_up else sorted(crossed, reverse=True)
@@ -228,9 +244,8 @@ def step_sleeve(positions, state, cfg: GridConfig, sleeve_id, target_usd,
     return opened, resolved
 
 
-def write_status(cfg: GridConfig, per_sleeve_open, mark, pivot, ok,
-                 error_msg: str | None = None):
-    now_iso = datetime.now(timezone.utc).astimezone().isoformat()
+def write_status(cfg: GridConfig, per_sleeve_open, mark, pivot, ok, error_msg: str | None = None):
+    now_iso = datetime.now(UTC).astimezone().isoformat()
     all_open = [p for ps in per_sleeve_open.values() for p in ps]
     deployed = sum(p.get("size_usd", 0) for p in all_open)
     status = {
@@ -276,32 +291,29 @@ def write_status(cfg: GridConfig, per_sleeve_open, mark, pivot, ok,
 def run_grid(cfg: GridConfig):
     log = logging.getLogger(cfg.worker_name)
     if not log.handlers:
-        logging.basicConfig(level=logging.INFO,
-                            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
     mark = fetch_mark(cfg, log)
     pivot = fetch_pivot(cfg, log)
     if mark is None or pivot is None:
-        write_status(cfg, {sid: [] for sid in cfg.sleeve_targets}, mark, pivot,
-                     ok=False, error_msg="feed fetch failed")
+        write_status(
+            cfg, {sid: [] for sid in cfg.sleeve_targets}, mark, pivot, ok=False, error_msg="feed fetch failed"
+        )
         return
 
     portfolio = load_portfolio()
     positions = portfolio.get("positions", []) if isinstance(portfolio, dict) else portfolio
     state = _load_json(cfg.state_file, {})
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
     per_sleeve_open = {}
     total_opened = 0
     total_resolved = 0
     for sleeve_id, target in cfg.sleeve_targets.items():
-        opened, resolved = step_sleeve(positions, state, cfg, sleeve_id,
-                                       target, mark, pivot, now_iso, log)
+        opened, resolved = step_sleeve(positions, state, cfg, sleeve_id, target, mark, pivot, now_iso, log)
         total_opened += opened
         total_resolved += resolved
-        per_sleeve_open[sleeve_id] = positions_for_sleeve(
-            positions, cfg.worker_name, sleeve_id
-        )
+        per_sleeve_open[sleeve_id] = positions_for_sleeve(positions, cfg.worker_name, sleeve_id)
 
     if isinstance(portfolio, dict):
         portfolio["positions"] = positions
@@ -311,5 +323,7 @@ def run_grid(cfg: GridConfig):
     _save_json_atomic(cfg.state_file, state)
 
     write_status(cfg, per_sleeve_open, mark, pivot, ok=True)
-    print(f"[{cfg.worker_name}] mark={mark:.6f} pivot={pivot:.6f} "
-          f"sleeves={len(per_sleeve_open)} opened={total_opened} resolved={total_resolved}")
+    print(
+        f"[{cfg.worker_name}] mark={mark:.6f} pivot={pivot:.6f} "
+        f"sleeves={len(per_sleeve_open)} opened={total_opened} resolved={total_resolved}"
+    )

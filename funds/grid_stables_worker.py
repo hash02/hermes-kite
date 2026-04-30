@@ -6,7 +6,9 @@ Stablecoin pair grid — mean-reverts around $1.0000. Tiny band (±0.3%),
 fills on micro-oscillations. Covers structural_grid (60/40) only.
 Thin config on grid_base.py; policy-driven.
 """
+
 from __future__ import annotations
+
 from grid_base import GridConfig, run_grid
 from policy import sleeve_targets_for, worker_cfg
 
