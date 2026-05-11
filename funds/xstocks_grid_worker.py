@@ -26,6 +26,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from http_utils import safe_urlopen
 from policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "xstocks_grid"
@@ -53,7 +54,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 def fetch_close(stooq_sym):
     url = f"https://stooq.com/q/l/?s={stooq_sym}&f=sd2t2ohlcv&h&e=csv"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=15) as r:
+    with safe_urlopen(req, timeout=15) as r:
         lines = r.read().decode().strip().splitlines()
     if len(lines) < 2:
         return None

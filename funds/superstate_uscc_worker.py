@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import urllib.request
 
+from http_utils import safe_urlopen
 from policy import sleeve_targets_for
 from yield_base import YieldConfig, run_yield
 
@@ -34,7 +35,7 @@ SUPERSTATE_API = "https://api.superstate.co/v1/funds/uscc"
 def fetch_uscc_apy() -> tuple[float | None, str]:
     req = urllib.request.Request(SUPERSTATE_API, headers={"User-Agent": "hermes-superstate-uscc/1.0"})
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with safe_urlopen(req, timeout=20) as r:
             data = json.loads(r.read())
     except Exception as e:
         return None, f"superstate api: {e}"

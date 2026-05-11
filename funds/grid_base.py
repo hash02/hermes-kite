@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from http_utils import safe_urlopen
+
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
 
@@ -53,7 +55,7 @@ class GridConfig:
 
 def _http_json(url: str):
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=15) as r:
+    with safe_urlopen(req, timeout=15) as r:
         return json.loads(r.read())
 
 

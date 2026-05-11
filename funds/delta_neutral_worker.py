@@ -39,6 +39,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
+from http_utils import safe_urlopen
 from policy import sleeve_targets_for, worker_cfg
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,7 @@ class FundingOpp(NamedTuple):
 def fetch_binance_funding() -> list[FundingOpp]:
     try:
         req = urllib.request.Request(BINANCE_FUNDING_URL, headers=UA)
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with safe_urlopen(req, timeout=15) as r:
             data = json.loads(r.read())
     except Exception as e:
         logger.error("Binance funding fetch failed: %s", e)

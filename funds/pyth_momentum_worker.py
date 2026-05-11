@@ -32,6 +32,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from http_utils import safe_urlopen
 from policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "pyth_momentum"
@@ -86,7 +87,7 @@ UA = {"User-Agent": "hermes-pyth-momentum/1.0"}
 
 def _http_json(url: str):
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=15) as r:
+    with safe_urlopen(req, timeout=15) as r:
         return json.loads(r.read())
 
 

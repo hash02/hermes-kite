@@ -26,6 +26,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from http_utils import safe_urlopen
 from policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "tv_momentum"
@@ -58,7 +59,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 def fetch_klines(binance_sym):
     url = KLINES_URL.format(sym=binance_sym)
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 hermes-kite"})
-    with urllib.request.urlopen(req, timeout=15) as r:
+    with safe_urlopen(req, timeout=15) as r:
         data = json.loads(r.read().decode("utf-8"))
     # klines: [open_time, open, high, low, close, volume, close_time, ...]
     closes = [float(k[4]) for k in data]

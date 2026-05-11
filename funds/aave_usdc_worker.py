@@ -34,6 +34,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from http_utils import safe_urlopen
 from policy import sleeve_targets_for
 
 HERMES = Path.home() / ".hermes" / "brain"
@@ -62,7 +63,7 @@ UA = {"User-Agent": "hermes-aave-usdc/1.0"}
 def fetch_apy():
     """Return (apy_decimal, source_timestamp_iso) or (None, None) on failure."""
     req = urllib.request.Request(CHART_URL, headers=UA)
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with safe_urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
     points = data.get("data", [])
     if not points:

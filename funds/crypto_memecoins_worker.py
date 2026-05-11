@@ -24,6 +24,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from http_utils import safe_urlopen
 from policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "crypto_memecoins"
@@ -57,7 +58,7 @@ UA = {"User-Agent": "hermes-crypto-memecoins/1.0"}
 def fetch_memecoins() -> list[dict]:
     req = urllib.request.Request(CG_URL, headers=UA)
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with safe_urlopen(req, timeout=20) as r:
             data = json.loads(r.read())
     except Exception as e:
         log.warning("coingecko fetch failed: %s", e)

@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from http_utils import safe_urlopen
+
 HERMES = Path.home() / ".hermes" / "brain"
 PORTFOLIO_FILE = HERMES / "paper_portfolio.json"
 
@@ -56,7 +58,7 @@ class YieldConfig:
 def _defillama_apy(pool_id: str):
     url = f"https://yields.llama.fi/chart/{pool_id}"
     req = urllib.request.Request(url, headers=UA)
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with safe_urlopen(req, timeout=20) as r:
         data = json.loads(r.read())
     points = data.get("data", [])
     if not points:

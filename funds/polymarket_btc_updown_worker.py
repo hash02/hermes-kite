@@ -27,6 +27,7 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from http_utils import safe_urlopen
 from policy import sleeve_targets_for, worker_cfg
 
 WORKER_NAME = "polymarket_btc_updown"
@@ -52,7 +53,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 
 def fetch_markets():
     req = urllib.request.Request(GAMMA_URL, headers={"User-Agent": "hermes-kite/1.0"})
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with safe_urlopen(req, timeout=20) as r:
         return json.loads(r.read())
 
 
@@ -122,7 +123,7 @@ def current_yes_price(slug):
     url = f"https://gamma-api.polymarket.com/markets?slug={slug}"
     req = urllib.request.Request(url, headers={"User-Agent": "hermes-kite/1.0"})
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with safe_urlopen(req, timeout=10) as r:
             d = json.loads(r.read())
     except Exception:
         return None

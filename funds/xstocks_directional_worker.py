@@ -35,6 +35,7 @@ PORTFOLIO_FILE = Path.home() / ".hermes/brain/paper_portfolio.json"
 STATUS_FILE = Path.home() / ".hermes/brain/status/xstocks_directional.json"
 STATE_FILE = Path.home() / ".hermes/brain/state/xstocks_directional_state.json"
 
+from http_utils import safe_urlopen  # noqa: E402
 from policy import sleeve_targets_for, worker_cfg  # noqa: E402
 
 UNIVERSE = [
@@ -66,7 +67,7 @@ def fetch_closes(yahoo_sym):
     url = YAHOO_URL.format(sym=yahoo_sym)
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     try:
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with safe_urlopen(req, timeout=15) as r:
             d = json.loads(r.read())
         result = d["chart"]["result"][0]
         closes = result["indicators"]["quote"][0]["close"]
